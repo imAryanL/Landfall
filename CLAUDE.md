@@ -47,6 +47,20 @@ Local: `household` (profile JSON) · `checklist_items` (template_id, custom, don
 Server: `push_tokens` (expo_token, county_zone, platform) · `sent_alerts` (nws_id, dedupe).
 Note: checklist item ↔ inventory entry are **linked** — checking off "Water — 8 gal target" creates/updates an inventory item with stock + expiration.
 
+## Where each feature lives (offline-first map)
+Most of the app is local — only 3 areas touch the network. Default to local; put a feature on the server only if it's a ✅ row below.
+
+| Feature | Storage | Server? | API / tool |
+|---|---|---|---|
+| Onboarding · checklist · inventory · documents · readiness score | local SQLite (+ local files) | ❌ | — |
+| Expiration reminders | on-device schedule | ❌ | `expo-notifications` |
+| AI checklist personalization | result saved local | ✅ 1 call | Claude API via **Supabase Edge Function** (key never bundled); **local rules-based fallback** so it never blocks |
+| Auth + manual cloud backup/restore | Supabase | ✅ | Supabase (Postgres; Storage for Pro doc backup) |
+| Subscriptions (Free / Pro) | RevenueCat | ✅ | RevenueCat |
+| Storm alerts | Supabase + push | ✅ | NWS `api.weather.gov` (no key; **User-Agent required**) → scheduled **Supabase Edge Function** → **Expo Push** |
+
+**Build order:** local features first (app fully works in airplane mode) → the one Claude call (with fallback) → Supabase auth/backup → the **alert pipeline LAST** (hardest/most novel; the app must be able to ship without it if needed).
+
 ## Conventions
 - Match the scaffold's existing style: kebab-case filenames, `@/` path alias, theme tokens from `src/constants/theme.ts` (`Colors`, `Fonts`, `Spacing`).
 - **Read the versioned Expo v56 docs before writing Expo code** (see AGENTS.md) — the API has changed across SDKs.
