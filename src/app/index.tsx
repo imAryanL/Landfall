@@ -1,98 +1,134 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+// Home screen — greeting, readiness score ring, and category breakdown.
+// Uses placeholder/mock data for now; will connect to the real local database once it exists.
+
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
+import { ReadinessRing } from '@/components/readiness-ring';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+const BREAKDOWN = [
+  { label: 'Supplies', percent: 84 },
+  { label: 'Plan', percent: 65 },
+  { label: 'Home', percent: 58 },
+  { label: 'Docs', percent: 80 },
+];
+
+const NEEDS_ATTENTION = [
+  { title: 'Water supply is low', subtitle: '3 of 8 gallons stored' },
+  { title: 'Batteries expiring soon', subtitle: 'AA pack · 12 days left' },
+];
+
+function BreakdownBar({ label, percent }: { label: string; percent: number }) {
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <View style={styles.breakdownRow}>
+      <View style={styles.breakdownLabelRow}>
+        <ThemedText type="small">{label}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {percent}%
+        </ThemedText>
+      </View>
+      <ThemedView type="backgroundSelected" style={styles.barTrack}>
+        <ThemedView type="primary" style={[styles.barFill, { width: `${percent}%` }]} />
+      </ThemedView>
+    </View>
   );
 }
 
 export default function HomeScreen() {
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
+    <ThemedView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
           <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Landfall
+            Good evening, Maya.
           </ThemedText>
-        </ThemedView>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+          <View style={styles.ringRow}>
+            <ReadinessRing score={72} />
+          </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold" style={styles.sectionTitle}>
+              Readiness breakdown
+            </ThemedText>
+            {BREAKDOWN.map((item) => (
+              <BreakdownBar key={item.label} {...item} />
+            ))}
+          </ThemedView>
 
-        {Platform.OS === 'web' && <WebBadge />}
+          <View style={styles.needsAttentionSection}>
+            <ThemedText type="smallBold" style={styles.sectionTitle}>
+              Needs attention
+            </ThemedText>
+            {NEEDS_ATTENTION.map((item) => (
+              <ThemedView key={item.title} type="warningBackground" style={styles.warningCard}>
+                <ThemedText type="smallBold" themeColor="warning">
+                  {item.title}
+                </ThemedText>
+                <ThemedText type="small" themeColor="warning">
+                  {item.subtitle}
+                </ThemedText>
+              </ThemedView>
+            ))}
+          </View>
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
+  scrollContent: {
     paddingHorizontal: Spacing.four,
+    paddingBottom: BottomTabInset + Spacing.four,
     gap: Spacing.four,
+    maxWidth: MaxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
   },
   title: {
     textAlign: 'center',
+    marginTop: Spacing.four,
   },
-  code: {
-    textTransform: 'uppercase',
+  ringRow: {
+    alignItems: 'center',
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
+  card: {
     borderRadius: Spacing.four,
+    padding: Spacing.four,
+    gap: Spacing.three,
+  },
+  sectionTitle: {
+    marginBottom: Spacing.one,
+  },
+  needsAttentionSection: {
+    gap: Spacing.two,
+  },
+  warningCard: {
+    borderRadius: Spacing.four,
+    padding: Spacing.three,
+    gap: Spacing.half,
+  },
+  breakdownRow: {
+    gap: Spacing.half,
+  },
+  breakdownLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  barTrack: {
+    height: 8,
+    borderRadius: Spacing.two,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: Spacing.two,
   },
 });

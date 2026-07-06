@@ -34,13 +34,14 @@ Offline-first, cross-platform hurricane-prep app for Florida households. React N
 **Scope rule:** any new idea mid-build = one line in the parking lot, zero code.
 
 ## Design system (the build spec — see `landfall_design.md` in memory for full per-screen detail)
-- **Accent:** teal / deep-teal (default; green is a reversible alternative — it's one theme constant). NOT generic blue.
+- **Accent:** green monochrome (`#047857` — decided Jun 29 2026, see `landfall_design.md`). NOT generic blue.
 - **Look:** light background, white cards, single accent, uncluttered. Anti-FEMA, anti-emergency-siren.
 - **Scores:** circular rings (main score) + mini bars (sub-scores). Quantities/status in rounded **pills**; short rationale subtext under list items.
 - **Tone color:** **amber** for warnings (expiring supplies, storm watches). **Red is reserved ONLY for real storm warnings** — banned everywhere else. Red = real danger; a stale battery is not danger.
 - **Nav:** bottom tab bar, 4 tabs — **Home · Checklist · Inventory · Alerts** (Home first).
 - **Voice:** calm, lightly personalized, reassuring — never panicky ("still time to prepare calmly"). Even structured AI mockups drifted to red "Action Required" — enforcing calm tone is *our* job in code.
 - **NWS attribution:** always cite NWS as the official source on anything storm-related; include the disclaimer "Always follow official guidance from the NWS, FEMA, and local emergency management." Position Landfall as a *preparedness organizer*, not an emergency-response service.
+- **Nice-to-have polish (from a Jul 3 2026 exploration, see `landfall_design.md` for detail — add opportunistically, don't let these block core screens):** weekly "small wins" nudges on Home to move the readiness score · signal-flag icons (pennant/1-flag/2-flag) as an alternate to plain bell icons for alert severity · a printable/offline "fridge card" one-page summary export · an animated, atmospheric first-launch intro screen — **build this last**, only once core screens/flows are done.
 
 ## Data model (v1 sketch)
 Local: `household` (profile JSON) · `checklist_items` (template_id, custom, done, target_qty) · `inventory_items` (name, category, qty, expires_at, photo_uri, checklist_link, storage_location) · `documents` (title, category, photo_uris, created_at) · `alerts_cache` (nws_id, event, severity, headline, expires).

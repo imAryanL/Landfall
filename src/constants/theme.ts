@@ -14,7 +14,9 @@ export const Colors = {
     background: '#F2F5F7', // app background (light gray)
     backgroundElement: '#FFFFFF', // cards / surfaces (white)
     backgroundSelected: '#E3F2EC', // pressed / selected (soft green)
-    primary: '#047857', // brand GREEN — buttons, active tab, etc.
+    primary: '#10B981', // brand GREEN (lighter) — buttons, active tab, etc.
+    warning: '#B45309', // amber warning text/icon (expiring items, low stock — never red)
+    warningBackground: '#FEF3C7', // amber warning card background
   },
   dark: {
     text: '#F1F5F9',
@@ -23,6 +25,8 @@ export const Colors = {
     backgroundElement: '#141C2B',
     backgroundSelected: '#1A2B24',
     primary: '#34D399',
+    warning: '#FBBF24',
+    warningBackground: '#3F2D12',
   },
 } as const;
 
