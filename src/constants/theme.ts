@@ -17,6 +17,7 @@ export const Colors = {
     primary: '#10B981', // brand GREEN (lighter) — buttons, active tab, etc.
     warning: '#B45309', // amber warning text/icon (expiring items, low stock — never red)
     warningBackground: '#FEF3C7', // amber warning card background
+    border: '#CBD5E1', // border around cards/sections (a touch darker than a hairline)
   },
   dark: {
     text: '#F1F5F9',
@@ -27,6 +28,7 @@ export const Colors = {
     primary: '#34D399',
     warning: '#FBBF24',
     warningBackground: '#3F2D12',
+    border: '#233043', // subtle hairline border around cards/sections
   },
 } as const;
 

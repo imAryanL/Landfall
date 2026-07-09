@@ -1,10 +1,11 @@
 // Placeholder screen for the Checklist tab — will hold the prep checklist (categories, items, progress).
 
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 type ChecklistItem = {
@@ -44,6 +45,32 @@ const CATEGORIES: ChecklistCategory[] = [
         subtitle: "No power required",
         targetQty: "1",
         checked: false,
+      },
+    ],
+  },
+  {
+    name: "Power & Light",
+    items: [
+      {
+        id: "flashlights",
+        name: "Flashlights",
+        subtitle: "Safer than candles indoors",
+        targetQty: "2",
+        checked: true,
+      },
+      {
+        id: "batteries",
+        name: "Backup batteries",
+        subtitle: "Powers radios and lights",
+        targetQty: "12",
+        checked: false,
+      },
+      {
+        id: "power-bank",
+        name: "Power bank",
+        subtitle: "Charges phones off-grid",
+        targetQty: "1",
+        checked: true,
       },
     ],
   },
@@ -95,22 +122,114 @@ function ChecklistRow({ item }: { item: ChecklistItem }) {
   );
 }
 
+// The header above a group of items: category name on the left, "2/3" progress on the right.
+function CategoryHeader({ category }: { category: ChecklistCategory }) {
+  // Count how many items in this category are checked off.
+  // Start the counter at 0, then add 1 for every item whose `checked` is true.
+  let checkedCount = 0;
+  for (const item of category.items) {
+    if (item.checked) {
+      checkedCount = checkedCount + 1;
+    }
+  }
+
+  // The total number of items in this category (e.g. 3 for Water & Food).
+  const totalCount = category.items.length;
+
+  return (
+    // A horizontal row: name pushed to the left, count pushed to the right.
+    <View style={styles.categoryHeader}>
+      {/* Left side: the category name, e.g. "Water & Food" */}
+      <ThemedText type="smallBold">{category.name}</ThemedText>
+
+      {/* Right side: progress like "2/3" (checked out of total) */}
+      <ThemedText type="small" themeColor="textSecondary">
+        {checkedCount}/{totalCount}
+      </ThemedText>
+    </View>
+  );
+}
+
 export default function ChecklistScreen() {
-  // Just testing one real row for now, using the first mock item.
-  const firstItem = CATEGORIES[0].items[0];
+  // Get the theme so the section border can use our border color.
+  const theme = useTheme();
+
+  // Build one bordered card per category.
+  const sections = [];
+  for (const category of CATEGORIES) {
+    // 1. Build this category's item rows, with a thin divider before each row except the first.
+    const rows = [];
+    for (const item of category.items) {
+      // rows.length > 0 means we've already added a row, so this isn't the first one.
+      if (rows.length > 0) {
+        rows.push(
+          <View
+            key={`divider-${item.id}`}
+            style={[styles.rowDivider, { backgroundColor: theme.border }]}
+          />,
+        );
+      }
+      rows.push(<ChecklistRow key={item.id} item={item} />);
+    }
+
+    // 2. Header sits ABOVE the box (outside the border); only the rows go inside the bordered box.
+    //    borderColor comes from the theme (added inline, since StyleSheet can't read the theme).
+    sections.push(
+      <View key={category.name} style={styles.categorySection}>
+        <CategoryHeader category={category} />
+        <View style={[styles.categoryCard, { borderColor: theme.border }]}>
+          {rows}
+        </View>
+      </View>,
+    );
+  }
 
   return (
     <ThemedView style={{ flex: 1 }}>
-      <SafeAreaView
-        style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24 }}
-      >
-        <ChecklistRow item={firstItem} />
+      <SafeAreaView style={{ flex: 1 }}>
+        {/* ScrollView lets the list scroll once it's taller than the screen.
+            paddingHorizontal keeps content off the edges; paddingBottom gives
+            breathing room above the tab bar when scrolled to the end. */}
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Screen header: big serif title + a calm, personalized subtitle. */}
+          <View style={styles.header}>
+            <ThemedText style={styles.headerTitle}>Prep checklist</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Tailored to a family of four
+            </ThemedText>
+          </View>
+
+          {/* Drop in all the headers + rows we built above, in order. */}
+          {sections}
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  header: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  categorySection: {
+    marginBottom: 20, // gap between one whole category section and the next
+  },
+  categoryCard: {
+    borderWidth: 2, // borderColor is set inline from the theme
+    borderRadius: 16,
+    paddingHorizontal: 16, // top/bottom spacing comes from the rows' own paddingVertical
+  },
+  headerTitle: {
+    fontFamily: Fonts.sans, // plain system sans-serif — matches the body text on this screen
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: "700", // bold
+  },
   checkbox: {
     width: 24,
     height: 24,
@@ -125,10 +244,20 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "700",
   },
+  categoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
+    paddingVertical: 14, // space above/below each row's content (was marginBottom)
+  },
+  rowDivider: {
+    height: 1, // thin horizontal line; its color is set inline from the theme
   },
   rowText: {
     flex: 1,
