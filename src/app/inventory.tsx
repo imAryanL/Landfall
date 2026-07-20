@@ -86,10 +86,21 @@ function InventoryCard({ item }: { item: InventoryItem }) {
 }
 
 export default function InventoryScreen() {
+  // Get the theme so the amber pill can use our warning colors.
+  const theme = useTheme();
+
   // Build one card per supply item, in order.
   const cards = [];
   for (const item of ITEMS) {
     cards.push(<InventoryCard key={item.id} item={item} />);
+  }
+
+  // Count how many supplies are expiring soon (shown as an amber pill in the header).
+  let expiringCount = 0;
+  for (const item of ITEMS) {
+    if (item.expiry && item.expiry.soon) {
+      expiringCount = expiringCount + 1;
+    }
   }
 
   return (
@@ -103,6 +114,15 @@ export default function InventoryScreen() {
             <ThemedText type="small" themeColor="textSecondary">
               What you have on hand
             </ThemedText>
+            {/* Amber pill — only shows when something is expiring soon. Calm days stay clean. */}
+            {expiringCount > 0 && (
+              <View style={[styles.expiringPill, { backgroundColor: theme.warningBackground }]}>
+                <MaterialCommunityIcons name="clock-alert-outline" size={14} color={theme.warning} />
+                <ThemedText type="small" themeColor="warning">
+                  {expiringCount} expiring soon
+                </ThemedText>
+              </View>
+            )}
           </View>
 
           {/* All the supply cards we built above. */}
@@ -125,6 +145,16 @@ const styles = StyleSheet.create({
   header: {
     marginTop: Spacing.two,
     marginBottom: Spacing.one,
+  },
+  expiringPill: {
+    flexDirection: "row",
+    alignItems: "center", // vertically center the icon against the text
+    gap: Spacing.one, // small space between the icon and the words
+    alignSelf: "flex-start", // pill hugs its content instead of filling the row
+    borderRadius: Spacing.three,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+    marginTop: Spacing.one, // a little breathing room below the subtitle
   },
   headerTitle: {
     fontFamily: Fonts.sans, // plain system sans-serif — matches the Checklist title

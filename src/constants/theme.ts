@@ -15,6 +15,8 @@ export const Colors = {
     backgroundElement: '#FFFFFF', // cards / surfaces (white)
     backgroundSelected: '#E3F2EC', // pressed / selected (soft green)
     primary: '#10B981', // brand GREEN (lighter) — buttons, active tab, etc.
+    primaryDeep: '#047857', // deeper green — icons/marks that need more weight than primary
+    primarySoft: '#A7DFC7', // soft green — subtle rings/accents, sits between backgroundSelected and primary
     warning: '#B45309', // amber warning text/icon (expiring items, low stock — never red)
     warningBackground: '#FEF3C7', // amber warning card background
     border: '#CBD5E1', // border around cards/sections (a touch darker than a hairline)
@@ -26,6 +28,8 @@ export const Colors = {
     backgroundElement: '#141C2B',
     backgroundSelected: '#1A2B24',
     primary: '#34D399',
+    primaryDeep: '#6EE7B7', // in dark mode "deeper" means brighter, so it still stands out
+    primarySoft: '#2A5546', // soft green for rings, dialed down to sit on a dark background
     warning: '#FBBF24',
     warningBackground: '#3F2D12',
     border: '#233043', // subtle hairline border around cards/sections
