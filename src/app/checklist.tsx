@@ -225,10 +225,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, // top/bottom spacing comes from the rows' own paddingVertical
   },
   headerTitle: {
-    fontFamily: Fonts.sans, // plain system sans-serif — matches the body text on this screen
+    fontFamily: Fonts.serif, // editorial serif — display headings only, body stays sans
     fontSize: 32,
     lineHeight: 38,
-    fontWeight: "700", // bold
+    fontWeight: "500", // serifs carry weight in the letterforms, so they read better light
   },
   checkbox: {
     width: 24,

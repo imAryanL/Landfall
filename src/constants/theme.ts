@@ -11,19 +11,22 @@ export const Colors = {
   light: {
     text: '#0F172A', // main text (near-black slate)
     textSecondary: '#5B6B78', // muted text (subtext)
+    textTertiary: '#94A3B8', // lightest text — small labels that shouldn't compete with content
     background: '#F2F5F7', // app background (light gray)
     backgroundElement: '#FFFFFF', // cards / surfaces (white)
     backgroundSelected: '#E3F2EC', // pressed / selected (soft green)
     primary: '#10B981', // brand GREEN (lighter) — buttons, active tab, etc.
     primaryDeep: '#047857', // deeper green — icons/marks that need more weight than primary
     primarySoft: '#A7DFC7', // soft green — subtle rings/accents, sits between backgroundSelected and primary
-    warning: '#B45309', // amber warning text/icon (expiring items, low stock — never red)
-    warningBackground: '#FEF3C7', // amber warning card background
+    warning: '#A16207', // amber warning text/icon (expiring items, low stock — never red)
+    warningFill: '#FACC15', // solid yellow for badge fills — always pair with DARK text, never white
+    warningBackground: '#FEF8DD', // amber warning card background (soft — calm, not alarming)
     border: '#CBD5E1', // border around cards/sections (a touch darker than a hairline)
   },
   dark: {
     text: '#F1F5F9',
     textSecondary: '#94A3B8',
+    textTertiary: '#64748B', // in dark mode "lighter" means dimmer, so it steps down not up
     background: '#0B1220',
     backgroundElement: '#141C2B',
     backgroundSelected: '#1A2B24',
@@ -31,6 +34,7 @@ export const Colors = {
     primaryDeep: '#6EE7B7', // in dark mode "deeper" means brighter, so it still stands out
     primarySoft: '#2A5546', // soft green for rings, dialed down to sit on a dark background
     warning: '#FBBF24',
+    warningFill: '#FACC15', // same yellow in dark mode — the dark text on it stays readable
     warningBackground: '#3F2D12',
     border: '#233043', // subtle hairline border around cards/sections
   },

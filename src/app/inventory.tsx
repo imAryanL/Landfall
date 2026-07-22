@@ -157,10 +157,10 @@ const styles = StyleSheet.create({
     marginTop: Spacing.one, // a little breathing room below the subtitle
   },
   headerTitle: {
-    fontFamily: Fonts.sans, // plain system sans-serif — matches the Checklist title
+    fontFamily: Fonts.serif, // editorial serif — display headings only, body stays sans
     fontSize: 32,
     lineHeight: 38,
-    fontWeight: "700",
+    fontWeight: "500", // serifs carry weight in the letterforms, so they read better light
   },
   card: {
     borderRadius: Spacing.four,
