@@ -21,6 +21,16 @@ export const Colors = {
     warning: '#A16207', // amber warning text/icon (expiring items, low stock — never red)
     warningFill: '#FACC15', // solid yellow for badge fills — always pair with DARK text, never white
     warningBackground: '#FEF8DD', // amber warning card background (soft — calm, not alarming)
+    // RED = real storm WARNINGS only (conditions expected). Banned everywhere else in the app.
+    // Note the flip from amber: a saturated red is a DARK fill, so its badge takes WHITE text
+    // (white on #DC2626 = 4.8:1, passes AA), the opposite of the light yellow badge above.
+    danger: '#B91C1C', // red warning text/icon — readable red on the light card
+    dangerFill: '#DC2626', // solid red for the warning badge — always pair with WHITE text
+    dangerBackground: '#FBDCDC', // soft red warning card background — rosier than a whisper, still calm not siren-loud
+    // Offline/cached = a NEUTRAL dark slate, deliberately NOT a severity color.
+    // Connectivity is a separate axis from calm/watch/warning, so it must never borrow
+    // amber or red (those belong to the alert states). Pair with light/white text.
+    offlineBanner: '#334155', // slate — the offline banner bar and the "cached" pill
     border: '#CBD5E1', // border around cards/sections (a touch darker than a hairline)
   },
   dark: {
@@ -36,6 +46,10 @@ export const Colors = {
     warning: '#FBBF24',
     warningFill: '#FACC15', // same yellow in dark mode — the dark text on it stays readable
     warningBackground: '#3F2D12',
+    danger: '#F87171', // lighter red so it reads on a dark background
+    dangerFill: '#DC2626', // same red in dark mode — the white text on it stays readable
+    dangerBackground: '#3F1D1D', // deep red card background, matching the amber one's darkness
+    offlineBanner: '#475569', // lighter slate so the neutral banner reads on the dark background
     border: '#233043', // subtle hairline border around cards/sections
   },
 } as const;

@@ -3,7 +3,7 @@
 // Mock data for now; the real NWS wiring comes in the functionality pass.
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
@@ -16,9 +16,21 @@ import {
 } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
-// Temporary switch so we can build and check both looks.
-// Real NWS data replaces this later — flip it to false to see the calm state.
-const HAS_ACTIVE_ALERT = true;
+// Which alert is showing. Temporary switch for building — real NWS data sets this later.
+//   "calm"    = no active alert (the all-clear state)
+//   "watch"   = conditions POSSIBLE (amber — prepare calmly)
+//   "warning" = conditions EXPECTED (red — act now)
+const ALERT_STATE: "calm" | "watch" | "warning" = "warning";
+
+// Whether we're showing cached data because the device has no connection. This is a
+// SEPARATE switch from ALERT_STATE on purpose: connectivity and severity are two
+// independent things — you can be offline on a calm day OR during a warning — so
+// "offline" is a banner layered on top of any state, never a fourth alert state.
+// Temporary switch for building; the real network check sets this later.
+const IS_OFFLINE = true;
+
+// When the cached NWS data was last successfully fetched. Mock for now.
+const CACHED_AT = "8:41 AM";
 
 // The storm's timing, in order. Mock data for now, but each row maps to a field the
 // NWS alert actually returns — "now" is the alert being in effect, then `onset`
@@ -33,21 +45,56 @@ const NEXT_STEPS = [
   "Review your family meeting point",
 ];
 
-const TIMELINE = [
+// What still works with no signal. Every row is a REAL v1 feature — naming something
+// the app doesn't actually have would be the exact opposite of what this list is for.
+// The last row is the one honest exception: alerts need a connection by nature.
+const OFFLINE_FEATURES = [
+  { name: "Prep checklist & inventory", note: "Saved on this device", isAvailable: true },
+  { name: "Document vault", note: "Saved on this device", isAvailable: true },
+  { name: "Live alerts", note: "Needs a connection to refresh", isAvailable: false },
+];
+
+// Two versions of the timeline — a watch and a warning describe different storms,
+// so the wording differs (tropical-storm-force winds "possible" vs hurricane-force
+// winds "expected"). Still three rows each: NWS publishes no hour-by-hour breakdown.
+const WATCH_TIMELINE = [
   { time: "Now", detail: "Watch in effect", isNow: true },
   { time: "Fri 2 PM", detail: "Sustained tropical-storm-force winds begin across the county", isNow: false },
   { time: "Sat 8 AM", detail: "Watch expires", isNow: false },
+];
+
+const WARNING_TIMELINE = [
+  { time: "Now", detail: "Warning in effect", isNow: true },
+  { time: "Fri 9 PM", detail: "Sustained hurricane-force winds begin across the county", isNow: false },
+  { time: "Sat 10 AM", detail: "Warning expires", isNow: false },
 ];
 
 export default function AlertsScreen() {
   // Get the theme so the location pin can use our muted color.
   const theme = useTheme();
 
+  // A warning is the one place red is allowed. The alert card looks the same for a
+  // watch and a warning — only these four values change, so we pick them once here.
+  // Note the badge text flip: the light amber fill takes dark text, the dark red
+  // fill takes white text (see the danger tokens in theme.ts).
+  const isWarning = ALERT_STATE === "warning";
+  const cardBackground = isWarning ? theme.dangerBackground : theme.warningBackground;
+  const badgeFill = isWarning ? theme.dangerFill : theme.warningFill;
+  const badgeTextColor = isWarning ? "#FFFFFF" : theme.text;
+  const badgeLabel = isWarning ? "HURRICANE WARNING" : "TROPICAL STORM WATCH";
+  const timeline = isWarning ? WARNING_TIMELINE : WATCH_TIMELINE;
+
+  // The freshness pill is one component in both states — online and offline differ only
+  // in these values, so we pick them once (same approach as the alert-card helpers above).
+  const pillLabel = IS_OFFLINE ? `LAST · ${CACHED_AT}` : "Updated 9:32 AM";
+  const pillBackground = IS_OFFLINE ? theme.offlineBanner : theme.backgroundElement;
+  const pillTextColor = IS_OFFLINE ? "#FFFFFF" : theme.textSecondary;
+
   // Build one row per timeline step, using a plain loop so it's easy to follow.
   const timelineRows = [];
-  for (const step of TIMELINE) {
+  for (const step of timeline) {
     // The last row has nothing below it, so it skips the connecting line and the gap.
-    const isLastRow = timelineRows.length === TIMELINE.length - 1;
+    const isLastRow = timelineRows.length === timeline.length - 1;
 
     timelineRows.push(
       <View key={step.time} style={styles.timelineRow}>
@@ -118,6 +165,35 @@ export default function AlertsScreen() {
     );
   }
 
+  // Build the "still available offline" rows, same divider pattern as the steps above.
+const offlineFeatureRows = [];
+  for (const feature of OFFLINE_FEATURES) {
+    // Available = a green check. The one online-only row gets a NEUTRAL gray cloud,
+    // never red — losing signal isn't danger, and red belongs to real storm warnings.
+    const iconName = feature.isAvailable ? "check-circle" : "cloud-off-outline";
+    const iconColor = feature.isAvailable ? theme.primary : theme.textSecondary;
+
+    offlineFeatureRows.push(
+      <View key={feature.name}>
+        {offlineFeatureRows.length > 0 && (
+          <View style={[styles.nextStepDivider, { backgroundColor: theme.border }]} />
+        )}
+
+        <View style={styles.offlineFeatureRow}>
+          <MaterialCommunityIcons name={iconName} size={20} color={iconColor} />
+
+          {/* Feature name on top, why it does or doesn't work underneath. */}
+          <View style={styles.offlineFeatureText}>
+            <ThemedText style={styles.offlineFeatureName}>{feature.name}</ThemedText>
+            <ThemedText themeColor="textSecondary" style={styles.offlineFeatureNote}>
+              {feature.note}
+            </ThemedText>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <ThemedView style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={["top", "left", "right"]}>
@@ -128,21 +204,19 @@ export default function AlertsScreen() {
             <View style={styles.titleRow}>
               <ThemedText style={styles.headerTitle}>Alerts</ThemedText>
 
-              {/* How fresh the data is — stale storm data is dangerous, so this is
-                  always visible. The pill can go amber later when the data is old. */}
-              <ThemedView type="backgroundElement" style={styles.updatedPill}>
+              {/* How fresh the data is — stale storm data is dangerous, so this is always
+                  visible. Same pill online or offline; offline just swaps in the neutral
+                  slate + "LAST" wording so staleness registers at a glance. */}
+              <View style={[styles.updatedPill, { backgroundColor: pillBackground }]}>
                 <MaterialCommunityIcons
                   name="clock-outline"
-                  size={10}
-                  color={theme.textSecondary}
+                  size={14}
+                  color={pillTextColor}
                 />
-                <ThemedText
-                  themeColor="textSecondary"
-                  style={styles.updatedPillText}
-                >
-                  Updated 9:32 AM
+                <ThemedText style={[styles.updatedPillText, { color: pillTextColor }]}>
+                  {pillLabel}
                 </ThemedText>
-              </ThemedView>
+              </View>
             </View>
 
             {/* County line: a location pin next to the county name, so people know it's their area. */}
@@ -158,10 +232,29 @@ export default function AlertsScreen() {
             </View>
           </View>
 
+          {/* Offline banner — a NEUTRAL dark bar (never amber/red, since connectivity is a
+              separate axis from severity). It sits ABOVE the alert content, so it layers onto
+              whatever state shows below — calm, watch, or a cached warning. The tone is
+              confident, not an error: in an offline-first app, no signal is the app working
+              as designed, not a failure. */}
+          {IS_OFFLINE && (
+            <View
+              style={[
+                styles.offlineBanner,
+                { backgroundColor: theme.offlineBanner },
+              ]}
+            >
+              <MaterialCommunityIcons name="wifi-off" size={21} color="#FFFFFF" />
+              <ThemedText style={styles.offlineBannerText}>
+                You&apos;re offline — Landfall still works. Showing your last saved NWS update from {CACHED_AT}.
+              </ThemedText>
+            </View>
+          )}
+
           {/* The calm "all clear" state — what people see on most days.
               Deliberately frameless: a card would only draw a box around "nothing is wrong".
               The watch/warning states DO get cards, so a card appearing means something real. */}
-          {!HAS_ACTIVE_ALERT && (
+          {ALERT_STATE === "calm" && (
             <View style={styles.calmState}>
               {/* Green check inside soft rings — a calm "radar is quiet" signal. */}
               <View style={[styles.ring1, { borderColor: theme.primarySoft }]}>
@@ -214,52 +307,68 @@ export default function AlertsScreen() {
             </View>
           )}
 
-          {/* The active alert card. Amber = a watch (prepare calmly), never red —
-              red is reserved for a real hurricane warning. */}
-          {HAS_ACTIVE_ALERT && (
+          {/* The active alert card. Amber = a watch (prepare calmly); red = a real
+              warning (conditions expected). The colors + wording come from the
+              isWarning helpers above, so both states share this one card. */}
+          {ALERT_STATE !== "calm" && (
             <View
-              style={[
-                styles.alertCard,
-                { backgroundColor: theme.warningBackground },
-              ]}
+              style={[styles.alertCard, { backgroundColor: cardBackground }]}
             >
               {/* Severity badge — the first thing your eye should land on.
-                  Yellow fill needs DARK text; white would be unreadable on it. */}
+                  A light amber fill needs DARK text; a dark red fill needs WHITE. */}
               <View
-                style={[
-                  styles.severityBadge,
-                  { backgroundColor: theme.warningFill },
-                ]}
+                style={[styles.severityBadge, { backgroundColor: badgeFill }]}
               >
                 {/* Storm symbol — a placeholder for the signal-flag system coming later. */}
                 <MaterialCommunityIcons
                   name="weather-hurricane"
                   size={13}
-                  color={theme.text}
+                  color={badgeTextColor}
                 />
-                <ThemedText style={styles.severityBadgeText}>
-                  TROPICAL STORM WATCH
+                <ThemedText
+                  style={[styles.severityBadgeText, { color: badgeTextColor }]}
+                >
+                  {badgeLabel}
                 </ThemedText>
               </View>
 
-              {/* Says what is happening and when — the one line someone reads if they read nothing else. */}
-              <ThemedText style={styles.alertHeadline}>
-                Tropical storm conditions possible by Friday afternoon
-              </ThemedText>
+              {/* Headline — the one line someone reads if they read nothing else.
+                  A watch says conditions are POSSIBLE; a warning says EXPECTED. */}
+              {isWarning ? (
+                <ThemedText style={styles.alertHeadline}>
+                  Hurricane conditions expected by Friday night
+                </ThemedText>
+              ) : (
+                <ThemedText style={styles.alertHeadline}>
+                  Tropical storm conditions possible by Friday afternoon
+                </ThemedText>
+              )}
 
-              {/* The details, ending on reassurance — panic makes people prepare worse, not better.
-                  A watch means POSSIBLE (a warning means expected) — mirror the NWS wording exactly. */}
-              <ThemedText style={styles.alertBody}>
-                Sustained winds of{" "}
-                <ThemedText style={styles.alertStat}>39–57 mph</ThemedText> are
-                possible across Broward County. A watch means conditions are
-                possible within{" "}
-                <ThemedText style={styles.alertStat}>48 hours</ThemedText> —
-                it&apos;s the signal to finish preparing, not a reason to panic.
-              </ThemedText>
+              {/* The details: fact → what the classification means → what to do.
+                  Calm-but-serious for a warning; we mirror the NWS wording exactly. */}
+              {isWarning ? (
+                <ThemedText style={styles.alertBody}>
+                  Sustained winds of{" "}
+                  <ThemedText style={styles.alertStat}>74+ mph</ThemedText> are
+                  expected across Broward County. A warning means these
+                  conditions are on the way within{" "}
+                  <ThemedText style={styles.alertStat}>36 hours</ThemedText> —
+                  it&apos;s time to finish every task and follow local emergency
+                  guidance.
+                </ThemedText>
+              ) : (
+                <ThemedText style={styles.alertBody}>
+                  Sustained winds of{" "}
+                  <ThemedText style={styles.alertStat}>39–57 mph</ThemedText> are
+                  possible across Broward County. A watch means conditions are
+                  possible within{" "}
+                  <ThemedText style={styles.alertStat}>48 hours</ThemedText> —
+                  it&apos;s the signal to finish preparing, not a reason to panic.
+                </ThemedText>
+              )}
 
               {/* Who issued this and when — builds trust, and matches the calm state's
-                  source line. Not textSecondary: muted gray washes out on the amber card. */}
+                  source line. Not textSecondary: muted gray washes out on the card. */}
               <ThemedText style={styles.alertIssued}>
                 Issued 5:03 AM · National Weather Service, Miami
               </ThemedText>
@@ -268,7 +377,7 @@ export default function AlertsScreen() {
 
           {/* "What to expect" — its own white card, kept separate from the amber one on
               purpose: amber says what is happening, white says what happens next. */}
-          {HAS_ACTIVE_ALERT && (
+          {ALERT_STATE !== "calm" && (
             <View style={styles.timelineSection}>
               {/* Heading sits ABOVE the card, matching how Checklist labels its
                   category boxes — the label names the box, it isn't inside it. */}
@@ -288,7 +397,7 @@ export default function AlertsScreen() {
 
           {/* "What you can do now" — the one question only Landfall can answer, since
               it knows what's already checked off. Comes last so the screen ends on action. */}
-          {HAS_ACTIVE_ALERT && (
+          {ALERT_STATE !== "calm" && (
             <View style={styles.nextStepsSection}>
               <ThemedText
                 themeColor="textSecondary"
@@ -299,6 +408,51 @@ export default function AlertsScreen() {
               <ThemedView type="backgroundElement" style={styles.nextStepsCard}>
                 {nextStepRows}
               </ThemedView>
+            </View>
+          )}
+
+          {/* "Still available offline" — shown only when there's no connection, because it
+              answers the question someone actually has in that moment: what can I still use?
+              Gated on IS_OFFLINE alone, so it layers onto any severity state below. */}
+          {IS_OFFLINE && (
+            <View style={styles.offlineListSection}>
+              <ThemedText
+                themeColor="textSecondary"
+                style={styles.timelineHeading}
+              >
+                Still available offline
+              </ThemedText>
+              <ThemedView type="backgroundElement" style={styles.offlineListCard}>
+                {offlineFeatureRows}
+              </ThemedView>
+
+              {/* The one action that can flip the "live alerts" row above from a cloud to a
+                  check. Outlined rather than filled on purpose: a solid green block would
+                  compete with the red warning card for attention, and this is housekeeping.
+                  onPress does nothing yet — the real network re-check is a functionality-pass
+                  job, and wiring a fake one would be a button that lies. */}
+              <Pressable
+                onPress={() => {}}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  { borderColor: theme.primarySoft },
+                  // Pressable hands us `pressed`, so we can dim the button while held —
+                  // without it a tap gives no feedback and feels broken.
+                  pressed && styles.retryButtonPressed,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="refresh"
+                  size={18}
+                  color={theme.primaryDeep}
+                />
+                <ThemedText
+                  themeColor="primaryDeep"
+                  style={styles.retryButtonText}
+                >
+                  Check for a connection
+                </ThemedText>
+              </Pressable>
             </View>
           )}
 
@@ -548,5 +702,62 @@ const styles = StyleSheet.create({
     flexDirection: "row", // put the pin and text side by side (RN defaults to column)
     alignItems: "center", // vertically center the pin against the text
     gap: Spacing.one, // small space between the pin and the county name
+  },
+  offlineListSection: {
+    gap: Spacing.two, // same heading-to-card spacing as the timeline and next-steps sections
+    marginTop: Spacing.three,
+  },
+  offlineListCard: {
+    borderRadius: 16,
+    paddingHorizontal: Spacing.four, // no vertical padding — the rows space themselves
+  },
+  offlineFeatureRow: {
+    flexDirection: "row", // icon on the left, the two lines of text beside it
+    alignItems: "center",
+    gap: Spacing.three,
+    paddingVertical: Spacing.three,
+  },
+  offlineFeatureText: {
+    flex: 1, // takes the rest of the row so long names wrap instead of overflowing
+    gap: 2, // hairline gap: the note reads as attached to the name above it
+  },
+  offlineFeatureName: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  offlineFeatureNote: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  retryButton: {
+    flexDirection: "row", // refresh icon next to the label
+    alignItems: "center",
+    justifyContent: "center", // centers the icon+label pair inside the full-width button
+    gap: Spacing.two,
+    paddingVertical: Spacing.three,
+    borderRadius: 12,
+    borderWidth: 1, // outlined, not filled — see the note in the JSX
+  },
+  retryButtonPressed: {
+    opacity: 0.6, // visible feedback while the finger is down
+  },
+  retryButtonText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600", // slightly heavier than body text so it reads as an action
+  },
+  offlineBanner: {
+    flexDirection: "row", // icon on the left, message filling the rest of the row
+    alignItems: "center", // centers the icon against the (possibly wrapped) text
+    gap: Spacing.two,
+    paddingVertical: Spacing.two, // 8 — a slim bar, not a heavy block
+    paddingHorizontal: Spacing.three,
+    borderRadius: 12,
+  },
+  offlineBannerText: {
+    flex: 1, // takes the rest of the row so the text wraps instead of overflowing
+    color: "#FFFFFF", // white on the dark slate fill — a dark fill takes light text
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
