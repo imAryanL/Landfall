@@ -4,11 +4,17 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { StyleSheet, View } from "react-native";
 
+import { SeasonBar } from "@/components/alerts/season-bar";
 import { ThemedText } from "@/components/themed-text";
 import { Fonts, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
-export function CalmState() {
+type CalmStateProps = {
+  // How far into hurricane season today is (0–100), forwarded to the season bar below.
+  seasonTodayPercent: number;
+};
+
+export function CalmState({ seasonTodayPercent }: CalmStateProps) {
   const theme = useTheme();
 
   return (
@@ -52,18 +58,31 @@ export function CalmState() {
         even if you lose signal.
       </ThemedText>
 
-      {/* Attribution — we organize prep, NWS is the official authority. */}
-      <ThemedText themeColor="textSecondary" style={styles.calmSource}>
-        Source: National Weather Service, Miami
-      </ThemedText>
+      {/* Where we are in hurricane season — a pure calendar, no forecast. */}
+      <SeasonBar todayPercent={seasonTodayPercent} />
+
+      {/* Calm-day nudge — gives the empty state a small job by pointing back into prep.
+          Soft green tint, not a card: it's an FYI, not an alert. Icon + centered text
+          echo the rings-over-text rhythm of the hero above. */}
+      <View style={[styles.nudge, { backgroundColor: theme.backgroundSelected }]}>
+        <MaterialCommunityIcons
+          name="lightbulb-outline"
+          size={25}
+          color={theme.primaryDeep}
+        />
+        <ThemedText themeColor="primaryDeep" style={styles.nudgeText}>
+          Quiet week, a good time to test flashlights, restock batteries, and refresh your water.
+        </ThemedText>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   calmState: {
-    paddingVertical: Spacing.six, // room to breathe now that there's no border holding it
-    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three, // sits the rings closer to the header
+    paddingBottom: Spacing.two, // small, so the nudge sits near the disclaimer below
+    // no horizontal padding: lets the nudge span the same width as the season bar below
     alignItems: "center", // centers everything horizontally — calm, not urgent
     gap: Spacing.three,
   },
@@ -83,11 +102,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     maxWidth: 280, // slightly narrower than the body above, so it reads as secondary
   },
-  calmSource: {
-    fontSize: 12, // smaller than ThemedText's "small" (14) — this is the quietest line
-    lineHeight: 16,
-    textAlign: "center",
-    marginTop: Spacing.six, // extra space so it detaches from the copy above it
+  nudge: {
+    alignSelf: "stretch", // full width inside the center-aligned column
+    alignItems: "center", // icon over centered text, matching the hero above
+    gap: Spacing.two,
+    borderRadius: 12,
+    padding: Spacing.three,
+  },
+  nudgeText: {
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: "center", // matches the centered copy up the screen
   },
   // Three rings, outermost to innermost. Each borderRadius is exactly half the width.
   ring1: {

@@ -24,17 +24,21 @@ import {
 //   "calm"    = no active alert (the all-clear state)
 //   "watch"   = conditions POSSIBLE (amber — prepare calmly)
 //   "warning" = conditions EXPECTED (red — act now)
-const ALERT_STATE: "calm" | "watch" | "warning" = "warning";
+const ALERT_STATE: "calm" | "watch" | "warning" = "calm";
 
 // Whether we're showing cached data because the device has no connection. This is a
 // SEPARATE switch from ALERT_STATE on purpose: connectivity and severity are two
 // independent things — you can be offline on a calm day OR during a warning — so
 // "offline" is a banner layered on top of any state, never a fourth alert state.
 // Temporary switch for building; the real network check sets this later.
-const IS_OFFLINE = true;
+const IS_OFFLINE = false;
 
 // When the cached NWS data was last successfully fetched. Mock for now.
 const CACHED_AT = "8:41 AM";
+
+// How far into hurricane season today is, as a percent (Jun 1 = 0, Nov 30 = 100). Mock
+// for now — the real value gets computed from today's date in the functionality pass.
+const SEASON_TODAY_PERCENT = 30;
 
 // The few things worth doing right now. Mock data — later these come from the
 // user's own unchecked checklist items, which is the part no article can give them.
@@ -87,8 +91,10 @@ export default function AlertsScreen() {
               a cached warning). See the component for why it's neutral slate, never amber/red. */}
           {IS_OFFLINE && <OfflineBanner cachedAt={CACHED_AT} />}
 
-          {/* The calm "all clear" state — frameless on purpose (see the component). */}
-          {ALERT_STATE === "calm" && <CalmState />}
+          {/* The calm "all clear" state — the season bar and nudge live inside it. */}
+          {ALERT_STATE === "calm" && (
+            <CalmState seasonTodayPercent={SEASON_TODAY_PERCENT} />
+          )}
 
           {/* The active alert card — amber for a watch, red for a warning. The colors and
               the wording live inside the component, keyed off severity. */}
@@ -109,8 +115,7 @@ export default function AlertsScreen() {
           {/* Sits outside both states on purpose — it has to show whether or not
               there's an alert. Landfall organizes prep; it is not an emergency service. */}
           <ThemedText themeColor="textSecondary" style={styles.disclaimer}>
-            Landfall helps you prepare. Always follow official emergency
-            guidance.
+            Landfall helps you prepare. Always follow official emergency guidance.
           </ThemedText>
         </ScrollView>
       </SafeAreaView>
