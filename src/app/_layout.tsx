@@ -20,6 +20,7 @@ export default function RootLayout() {
             Headers are off because every screen draws its own title. */}
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="onboarding" />
         </Stack>
       </ThemeProvider>
     </SQLiteProvider>
