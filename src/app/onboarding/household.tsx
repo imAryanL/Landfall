@@ -8,6 +8,7 @@
 // think onboarding had already run.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -215,9 +216,8 @@ export default function HouseholdScreen() {
             the end of a long page the user has to reach. Same deep-green pill as the
             welcome screen's button. */}
         <View style={styles.footer}>
-          {/* No onPress yet — screen 3 doesn't exist, and sending someone to a route that
-              isn't there is worse than a button that waits. Wired up next session. */}
           <Pressable
+            onPress={() => router.push('/onboarding/location')}
             style={({ pressed }) => [
               styles.button,
               { backgroundColor: theme.primaryDeep },

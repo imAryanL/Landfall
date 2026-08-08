@@ -8,7 +8,14 @@
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingHeader, TOTAL_STEPS } from '@/components/onboarding/onboarding-header';
@@ -16,8 +23,18 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { fetchPointData } from '@/lib/nws';
+import { lookupZip } from '@/lib/zip-lookup';
 
 const CURRENT_STEP = 2;
+
+// What the ZIP lookup came back with. The ZIP it belongs to is kept alongside it, so a slow
+// answer for a ZIP the user has already retyped can never be shown under the new one.
+type Lookup = {
+  zip: string;
+  status: 'loading' | 'found' | 'unknown' | 'offline';
+  place: string; // "Plantation, FL" — empty unless the status is 'found'
+};
 
 // Mobile and manufactured homes are the reason this question is worth asking — Florida
 // evacuates them first, and their prep advice genuinely differs from a house's.
@@ -32,11 +49,44 @@ export default function LocationScreen() {
 
   const [zip, setZip] = useState('');
   const [homeType, setHomeType] = useState<string | null>(null);
+  const [lookup, setLookup] = useState<Lookup | null>(null);
+
+  // The ZIP becomes coordinates from the table bundled in the app, and those coordinates
+  // go to the National Weather Service.
+  async function runLookup(zipCode: string) {
+    const coords = lookupZip(zipCode);
+
+    // The table covers home addresses, not PO boxes and single-building ZIPs, so a miss
+    // here means "not the ZIP we need" rather than "not a real ZIP."
+    if (coords === null) {
+      setLookup({ zip: zipCode, status: 'unknown', place: '' });
+      return;
+    }
+
+    setLookup({ zip: zipCode, status: 'loading', place: '' });
+
+    const point = await fetchPointData(coords.lat, coords.lon);
+
+    // fetchPointData returns null for no signal, a bad response, or the 8 second timeout.
+    // All three mean the same thing to the user, so they share one message.
+    if (point === null) {
+      setLookup({ zip: zipCode, status: 'offline', place: '' });
+      return;
+    }
+
+    setLookup({ zip: zipCode, status: 'found', place: point.city + ', ' + point.state });
+  }
 
   // The number pad still offers characters we don't want stored, so anything that isn't a
   // digit is dropped as it's typed rather than validated later.
   function handleZipChange(text: string) {
-    setZip(text.replace(/[^0-9]/g, ''));
+    const digits = text.replace(/[^0-9]/g, '');
+    setZip(digits);
+
+    // Five digits is the only moment there is anything to look up.
+    if (digits.length === 5) {
+      runLookup(digits);
+    }
   }
 
   // Built before the JSX, the same way screen 2 builds its chips.
@@ -68,6 +118,95 @@ export default function LocationScreen() {
           <MaterialCommunityIcons name="check" size={18} color={theme.primaryDeep} />
         ) : null}
       </Pressable>
+    );
+  }
+
+  // Only built for the ZIP currently in the field, so an answer that arrives late can never
+  // sit under a different number than the one it was looked up for.
+  let panel = null;
+  if (lookup !== null && lookup.zip === zip && lookup.status === 'loading') {
+    panel = (
+      <View
+        style={[
+          styles.panel,
+          { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+        ]}>
+        <ActivityIndicator size="small" color={theme.textSecondary} />
+
+        <View style={styles.panelBody}>
+          <ThemedText themeColor="textSecondary" style={styles.panelLabel}>
+            Checking
+          </ThemedText>
+
+          <ThemedText style={styles.panelText}>Looking up your area.</ThemedText>
+        </View>
+      </View>
+    );
+  } else if (lookup !== null && lookup.zip === zip && lookup.status === 'found') {
+    panel = (
+      <View
+        style={[
+          styles.panel,
+          { backgroundColor: theme.backgroundSelected, borderColor: theme.primary },
+        ]}>
+        <MaterialCommunityIcons name="map-marker-check-outline" size={18} color={theme.primaryDeep} />
+
+        <View style={styles.panelBody}>
+          <ThemedText themeColor="primaryDeep" style={styles.panelLabel}>
+            Location found!
+          </ThemedText>
+
+          <ThemedText style={styles.panelPlace}>{lookup.place}</ThemedText>
+
+          <ThemedText themeColor="textSecondary" style={styles.panelNote}>
+            We will show the National Weather Service warnings for this area. Get prepared.
+          </ThemedText>
+        </View>
+      </View>
+    );
+  } else if (lookup !== null && lookup.zip === zip && lookup.status === 'unknown') {
+    panel = (
+      <View
+        style={[
+          styles.panel,
+          { backgroundColor: theme.warningBackground, borderColor: theme.warning },
+        ]}>
+        <MaterialCommunityIcons name="alert-circle-outline" size={18} color={theme.warning} />
+
+        <View style={styles.panelBody}>
+          <ThemedText themeColor="warning" style={styles.panelLabel}>
+            ZIP not recognized
+          </ThemedText>
+
+          <ThemedText style={styles.panelText}>
+            Try the one for your home address.
+          </ThemedText>
+        </View>
+      </View>
+    );
+  } else if (lookup !== null && lookup.zip === zip && lookup.status === 'offline') {
+    panel = (
+      <View
+        style={[
+          styles.panel,
+          { backgroundColor: theme.offlineBanner, borderColor: theme.offlineBanner },
+        ]}>
+        <MaterialCommunityIcons name="cloud-off-outline" size={18} color="#FFFFFF" />
+
+        <View style={styles.panelBody}>
+          {/* The dark fill is the one place on this screen where the text has to be light
+              instead of taking its color from the theme. */}
+          <ThemedText style={[styles.panelLabel, styles.onDark]}>
+            Couldn&apos;t reach the service
+          </ThemedText>
+
+          {/* Onboarding is allowed to finish offline, so this says "keep going" rather
+              than asking the user to fix something they may not be able to fix. */}
+          <ThemedText style={[styles.panelText, styles.onDark]}>
+            You can keep going. Landfall will finish this the next time you&apos;re online.
+          </ThemedText>
+        </View>
+      </View>
     );
   }
 
@@ -118,6 +257,8 @@ export default function LocationScreen() {
             <ThemedText themeColor="textSecondary" style={styles.fieldHelp}>
               Use the ZIP for your home address, not a PO box.
             </ThemedText>
+
+            {panel}
           </View>
 
           <View style={styles.homeBlock}>
@@ -206,6 +347,46 @@ const styles = StyleSheet.create({
   fieldHelp: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  panel: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+    borderRadius: 14,
+    padding: Spacing.three,
+    // Bordered in the state's own color. The fields above are 1px grey on white, so this
+    // still reads as what your answer produced rather than another thing to fill in.
+    borderWidth: 2,
+  },
+  panelBody: {
+    flex: 1,
+    gap: Spacing.one,
+  },
+  panelLabel: {
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  panelPlace: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '600',
+  },
+  panelText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  panelNote: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  // Overrides ThemedText's theme color. Only the offline panel needs it, because it's the
+  // one panel with a dark fill instead of a tint.
+  onDark: {
+    color: '#FFFFFF',
   },
   homeBlock: {
     paddingTop: Spacing.four,
