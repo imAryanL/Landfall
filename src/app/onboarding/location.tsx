@@ -7,6 +7,7 @@
 // Nothing on this screen writes to the database. Screen 6 saves every answer together.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -210,6 +211,14 @@ export default function LocationScreen() {
     );
   }
 
+  // Coordinates are the thing this screen actually has to come away with, and the bundled
+  // table gives us those before the network is involved. So the offline case moves on too —
+  // the county and zone get filled in the next time the app has a connection.
+  const canContinue =
+    lookup !== null &&
+    lookup.zip === zip &&
+    (lookup.status === 'found' || lookup.status === 'offline');
+
   return (
     <ThemedView style={{ flex: 1 }}>
       <SafeAreaView style={styles.safeArea}>
@@ -275,14 +284,20 @@ export default function LocationScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {/* Still inert — the lookup that has to run before moving on lands next. */}
+          {/* Home type deliberately doesn't gate this — only the location does, and Skip
+              is there for anyone who won't give one. */}
           <Pressable
+            onPress={() => router.push('/onboarding/supplies')}
+            disabled={!canContinue}
             style={({ pressed }) => [
               styles.button,
-              { backgroundColor: theme.primaryDeep },
+              { backgroundColor: canContinue ? theme.primaryDeep : theme.border },
               pressed && styles.buttonPressed,
             ]}>
-            <ThemedText style={styles.buttonText}>Continue</ThemedText>
+            <ThemedText
+              style={[styles.buttonText, canContinue ? null : { color: theme.textSecondary }]}>
+              Continue
+            </ThemedText>
           </Pressable>
         </View>
       </SafeAreaView>
