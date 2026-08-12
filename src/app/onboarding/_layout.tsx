@@ -7,6 +7,14 @@
 
 import { Stack } from 'expo-router';
 
+import { OnboardingDraftProvider } from '@/components/onboarding/onboarding-draft';
+
 export default function OnboardingLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // The provider sits above the stack, so every screen in the flow reads and writes one
+  // shared set of answers instead of its own.
+  return (
+    <OnboardingDraftProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </OnboardingDraftProvider>
+  );
 }

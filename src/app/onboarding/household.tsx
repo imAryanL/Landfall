@@ -9,10 +9,10 @@
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useOnboardingDraft } from '@/components/onboarding/onboarding-draft';
 import { OnboardingHeader, TOTAL_STEPS } from '@/components/onboarding/onboarding-header';
 import { StepperRow } from '@/components/onboarding/stepper-row';
 import { ThemedText } from '@/components/themed-text';
@@ -35,32 +35,21 @@ const CONCERNS = [
 export default function HouseholdScreen() {
   const theme = useTheme();
 
-  // Held in this screen only. Nothing is saved until screen 6, for the reason at the
-  // top of the file.
-  const [name, setName] = useState('');
-
-  // Starts at one adult and nothing else — the smallest true household. Counting up from
-  // there is a deliberate tap, where starting at 2 would quietly ship a wrong number for
-  // anyone living alone who doesn't notice it.
-  const [adults, setAdults] = useState(1);
-  const [kids, setKids] = useState(0);
-  const [pets, setPets] = useState(0);
+  // Answers live in the shared draft above this screen, so they're still here when the
+  // user comes back, and screen 6 can save them. Nothing writes to the database yet.
+  const { draft, updateDraft } = useOnboardingDraft();
 
   // Worked out fresh on every render, so the card below moves the moment a stepper is
   // tapped. It's plain arithmetic on three small numbers, so there's nothing to cache.
-  const targets = computeTargets(adults, kids, pets);
-
-  // Which concern chips are switched on. Any number of them can be, so this holds a list
-  // of ids rather than a single value.
-  const [concerns, setConcerns] = useState<string[]>([]);
+  const targets = computeTargets(draft.adults, draft.kids, draft.pets);
 
   // Turns one chip on or off. Both branches build a brand new array instead of changing
   // the old one — React only re-renders when it's handed a different array.
   function toggleConcern(id: string) {
-    if (concerns.includes(id)) {
-      setConcerns(concerns.filter((concernId) => concernId !== id));
+    if (draft.concerns.includes(id)) {
+      updateDraft({ concerns: draft.concerns.filter((concernId) => concernId !== id) });
     } else {
-      setConcerns([...concerns, id]);
+      updateDraft({ concerns: [...draft.concerns, id] });
     }
   }
 
@@ -68,7 +57,7 @@ export default function HouseholdScreen() {
   // a readable list of blocks.
   const chips = [];
   for (const concern of CONCERNS) {
-    const isOn = concerns.includes(concern.id);
+    const isOn = draft.concerns.includes(concern.id);
     chips.push(
       <Pressable
         key={concern.id}
@@ -139,8 +128,8 @@ export default function HouseholdScreen() {
                 every keystroke calls onChangeText to put it back. React Native has no
                 onChange event here — the text itself is handed straight to the function. */}
             <TextInput
-              value={name}
-              onChangeText={setName}
+              value={draft.name}
+              onChangeText={(text) => updateDraft({ name: text })}
               placeholder="Aryan"
               placeholderTextColor={theme.textSecondary}
               autoCapitalize="words" // names are written capitalised
@@ -166,11 +155,29 @@ export default function HouseholdScreen() {
               styles.card,
               { borderColor: theme.border, backgroundColor: theme.backgroundElement },
             ]}>
-            <StepperRow label="Adults" hint="Including you" value={adults} onChange={setAdults} min={1} />
+            <StepperRow
+              label="Adults"
+              hint="Including you"
+              value={draft.adults}
+              onChange={(value) => updateDraft({ adults: value })}
+              min={1}
+            />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <StepperRow label="Children" hint="Under 18" value={kids} onChange={setKids} min={0} />
+            <StepperRow
+              label="Children"
+              hint="Under 18"
+              value={draft.kids}
+              onChange={(value) => updateDraft({ kids: value })}
+              min={0}
+            />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <StepperRow label="Pets" hint="Cats and dogs drink too" value={pets} onChange={setPets} min={0} />
+            <StepperRow
+              label="Pets"
+              hint="Cats and dogs drink too"
+              value={draft.pets}
+              onChange={(value) => updateDraft({ pets: value })}
+              min={0}
+            />
           </View>
 
           {/* Its own tinted panel rather than a row inside the card above — the card is
