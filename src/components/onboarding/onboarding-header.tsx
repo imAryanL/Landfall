@@ -1,5 +1,5 @@
 // The row that sits at the top of every onboarding screen that asks something: a back
-// button, the progress dots, and a skip link.
+// button and the progress dots.
 //
 // It lives in its own file because screens 3 through 6 all need the same row. Five copies
 // of it would be five chances to forget to bump the step number, so the count of steps is
@@ -9,7 +9,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -54,12 +53,9 @@ export function OnboardingHeader({ step }: OnboardingHeaderProps) {
 
       <View style={styles.dots}>{dots}</View>
 
-      {/* Not wired up yet — it needs the screen after this one to exist first. */}
-      <Pressable style={({ pressed }) => (pressed ? styles.pressed : null)}>
-        <ThemedText themeColor="textSecondary" style={styles.skip}>
-          Skip
-        </ThemedText>
-      </Pressable>
+      {/* No skip button — Continue already advances without answering. This balances the
+          back button so the dots stay centered. */}
+      <View style={styles.spacer} />
     </View>
   );
 }
@@ -89,8 +85,8 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
   },
-  skip: {
-    fontSize: 16,
+  spacer: {
+    width: 40,
   },
   pressed: {
     opacity: 0.6,

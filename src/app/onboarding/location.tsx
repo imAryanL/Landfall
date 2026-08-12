@@ -284,8 +284,8 @@ export default function LocationScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {/* Home type deliberately doesn't gate this — only the location does, and Skip
-              is there for anyone who won't give one. */}
+          {/* Home type deliberately doesn't gate this — only the ZIP does. It's the one
+              answer onboarding won't move past, since Alerts has nothing without it. */}
           <Pressable
             onPress={() => router.push('/onboarding/supplies')}
             disabled={!canContinue}

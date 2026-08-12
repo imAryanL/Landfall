@@ -1,7 +1,6 @@
 // Screen 4 of 6 — supplies the user already owns, so the app doesn't open at 0%.
 // Nothing here writes to the database; screen 6 saves everything at once.
 
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -68,6 +67,8 @@ export default function SuppliesScreen() {
         <Pressable
           key={item.id}
           onPress={() => toggleItem(item.id)}
+          // The fill is the only visual cue now, so VoiceOver needs to be told separately.
+          accessibilityState={{ selected: isOn }}
           style={({ pressed }) => [
             styles.chip,
             {
@@ -76,12 +77,6 @@ export default function SuppliesScreen() {
             },
             pressed && styles.pressed,
           ]}>
-          {/* Only render the check when it's on. Reserving the space widens every
-              unselected chip and breaks the two-per-line fit. */}
-          {isOn ? (
-            <MaterialCommunityIcons name="check" size={16} color={theme.primaryDeep} />
-          ) : null}
-
           <ThemedText themeColor={isOn ? 'primaryDeep' : 'text'} style={styles.chipLabel}>
             {item.label}
           </ThemedText>
@@ -191,9 +186,6 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: Spacing.three,
