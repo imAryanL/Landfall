@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useOnboardingDraft } from '@/components/onboarding/onboarding-draft';
 import { OnboardingHeader, TOTAL_STEPS } from '@/components/onboarding/onboarding-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -47,15 +48,21 @@ const HOME_TYPES = [
 
 export default function LocationScreen() {
   const theme = useTheme();
+  const { draft, updateDraft } = useOnboardingDraft();
 
-  const [zip, setZip] = useState('');
-  const [homeType, setHomeType] = useState<string | null>(null);
+  // The lookup stays on this screen. It's the state of our network call, not an answer the
+  // user gave us, so screen 6 has no use for it.
   const [lookup, setLookup] = useState<Lookup | null>(null);
 
   // The ZIP becomes coordinates from the table bundled in the app, and those coordinates
   // go to the National Weather Service.
   async function runLookup(zipCode: string) {
     const coords = lookupZip(zipCode);
+
+    // A new ZIP makes the old county wrong, so it's cleared before anything else. Without
+    // this, changing a found ZIP to one that fails offline would carry the first ZIP's
+    // county and zone into the save.
+    updateDraft({ point: null });
 
     // The table covers home addresses, not PO boxes and single-building ZIPs, so a miss
     // here means "not the ZIP we need" rather than "not a real ZIP."
@@ -75,6 +82,9 @@ export default function LocationScreen() {
       return;
     }
 
+    // The whole reply is kept, not just the city. Screen 6 needs the county, zone and
+    // office out of it to fill their columns.
+    updateDraft({ point });
     setLookup({ zip: zipCode, status: 'found', place: point.city + ', ' + point.state });
   }
 
@@ -82,7 +92,7 @@ export default function LocationScreen() {
   // digit is dropped as it's typed rather than validated later.
   function handleZipChange(text: string) {
     const digits = text.replace(/[^0-9]/g, '');
-    setZip(digits);
+    updateDraft({ zip: digits });
 
     // Five digits is the only moment there is anything to look up.
     if (digits.length === 5) {
@@ -93,11 +103,11 @@ export default function LocationScreen() {
   // Built before the JSX, the same way screen 2 builds its chips.
   const homeRows = [];
   for (const home of HOME_TYPES) {
-    const isOn = homeType === home.id;
+    const isOn = draft.homeType === home.id;
     homeRows.push(
       <Pressable
         key={home.id}
-        onPress={() => setHomeType(home.id)}
+        onPress={() => updateDraft({ homeType: home.id })}
         style={({ pressed }) => [
           styles.homeRow,
           {
@@ -125,7 +135,7 @@ export default function LocationScreen() {
   // Only built for the ZIP currently in the field, so an answer that arrives late can never
   // sit under a different number than the one it was looked up for.
   let panel = null;
-  if (lookup !== null && lookup.zip === zip && lookup.status === 'loading') {
+  if (lookup !== null && lookup.zip === draft.zip && lookup.status === 'loading') {
     panel = (
       <View
         style={[
@@ -143,7 +153,7 @@ export default function LocationScreen() {
         </View>
       </View>
     );
-  } else if (lookup !== null && lookup.zip === zip && lookup.status === 'found') {
+  } else if (lookup !== null && lookup.zip === draft.zip && lookup.status === 'found') {
     panel = (
       <View
         style={[
@@ -165,7 +175,7 @@ export default function LocationScreen() {
         </View>
       </View>
     );
-  } else if (lookup !== null && lookup.zip === zip && lookup.status === 'unknown') {
+  } else if (lookup !== null && lookup.zip === draft.zip && lookup.status === 'unknown') {
     panel = (
       <View
         style={[
@@ -185,7 +195,7 @@ export default function LocationScreen() {
         </View>
       </View>
     );
-  } else if (lookup !== null && lookup.zip === zip && lookup.status === 'offline') {
+  } else if (lookup !== null && lookup.zip === draft.zip && lookup.status === 'offline') {
     panel = (
       <View
         style={[
@@ -216,7 +226,7 @@ export default function LocationScreen() {
   // the county and zone get filled in the next time the app has a connection.
   const canContinue =
     lookup !== null &&
-    lookup.zip === zip &&
+    lookup.zip === draft.zip &&
     (lookup.status === 'found' || lookup.status === 'offline');
 
   return (
@@ -246,7 +256,7 @@ export default function LocationScreen() {
             </ThemedText>
 
             <TextInput
-              value={zip}
+              value={draft.zip}
               onChangeText={handleZipChange}
               placeholder="33322"
               placeholderTextColor={theme.textSecondary}

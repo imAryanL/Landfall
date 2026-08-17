@@ -1,10 +1,10 @@
 // Screen 4 of 6 — supplies the user already owns, so the app doesn't open at 0%.
 // Nothing here writes to the database; screen 6 saves everything at once.
 
-import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useOnboardingDraft } from '@/components/onboarding/onboarding-draft';
 import { OnboardingHeader, TOTAL_STEPS } from '@/components/onboarding/onboarding-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -45,15 +45,14 @@ const SUPPLY_SECTIONS = [
 
 export default function SuppliesScreen() {
   const theme = useTheme();
-
-  const [owned, setOwned] = useState<string[]>([]);
+  const { draft, updateDraft } = useOnboardingDraft();
 
   // Multi-select here, unlike the single home type on screen 3.
   function toggleItem(id: string) {
-    if (owned.includes(id)) {
-      setOwned(owned.filter((ownedId) => ownedId !== id));
+    if (draft.owned.includes(id)) {
+      updateDraft({ owned: draft.owned.filter((ownedId) => ownedId !== id) });
     } else {
-      setOwned([...owned, id]);
+      updateDraft({ owned: [...draft.owned, id] });
     }
   }
 
@@ -62,7 +61,7 @@ export default function SuppliesScreen() {
   for (const section of SUPPLY_SECTIONS) {
     const chips = [];
     for (const item of section.items) {
-      const isOn = owned.includes(item.id);
+      const isOn = draft.owned.includes(item.id);
       chips.push(
         <Pressable
           key={item.id}
