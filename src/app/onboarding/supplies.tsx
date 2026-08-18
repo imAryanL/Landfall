@@ -1,6 +1,7 @@
 // Screen 4 of 6 — supplies the user already owns, so the app doesn't open at 0%.
 // Nothing here writes to the database; screen 6 saves everything at once.
 
+import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -116,8 +117,8 @@ export default function SuppliesScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {/* Inert until screen 5 exists. */}
           <Pressable
+            onPress={() => router.push('/onboarding/notifications')}
             style={({ pressed }) => [
               styles.button,
               { backgroundColor: theme.primaryDeep },
