@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -40,7 +41,7 @@ type Lookup = {
 
 // Mobile and manufactured homes are the reason this question is worth asking — Florida
 // evacuates them first, and their prep advice genuinely differs from a house's.
-const HOME_TYPES = [
+export const HOME_TYPES = [
   { id: 'house', label: 'House or townhouse', icon: 'home-outline' },
   { id: 'apartment', label: 'Apartment or condo', icon: 'office-building-outline' },
   { id: 'mobile', label: 'Mobile or manufactured home', icon: 'caravan' },
@@ -96,6 +97,8 @@ export default function LocationScreen() {
 
     // Five digits is the only moment there is anything to look up.
     if (digits.length === 5) {
+      // number-pad has no return key, so nothing else dismisses this.
+      Keyboard.dismiss();
       runLookup(digits);
     }
   }

@@ -4,6 +4,7 @@
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -182,9 +183,10 @@ export default function NotificationsScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {/* Inert until screen 6 exists. Deliberately ungated — leaving both rows unpicked
-              is a valid answer, the same as every other screen in the flow. */}
+          {/* Deliberately ungated — leaving both rows unpicked is a valid answer, the same
+              as every other screen in the flow. */}
           <Pressable
+            onPress={() => router.push('/onboarding/summary')}
             style={({ pressed }) => [
               styles.button,
               { backgroundColor: theme.primaryDeep },
