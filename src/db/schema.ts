@@ -9,7 +9,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 export const DATABASE_NAME = 'landfall.db';
 
 // Bump this by one every time a step is added to the ladder below.
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 /**
  * Brings a database file up to the current version. Runs once when the app starts.
@@ -73,10 +73,40 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     currentVersion = 1;
   }
 
+  // --- Step 2 ------------------------------------------------------------------------
+  if (currentVersion === 1) {
+    await db.execAsync(`
+      CREATE TABLE inventory_items (
+        id INTEGER PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT,
+
+        -- Onboarding seeds these at 1: the user only said they own it, not how much.
+        quantity INTEGER NOT NULL DEFAULT 1,
+
+        -- ISO string like the household dates. Null for anything that never expires.
+        expires_at TEXT,
+
+        -- A path to a file on this phone, not the image itself.
+        photo_uri TEXT,
+        storage_location TEXT,
+
+        -- The checklist item this stocks. No foreign key yet — checklist_items
+        -- doesn't exist, and SQLite would only complain about it at write time.
+        checklist_item_id INTEGER,
+
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    currentVersion = 2;
+  }
+
   // --- Future steps go here ----------------------------------------------------------
-  //   if (currentVersion === 1) {
+  //   if (currentVersion === 2) {
   //     await db.execAsync(`CREATE TABLE checklist_items (...);`);
-  //     currentVersion = 2;
+  //     currentVersion = 3;
   //   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);
