@@ -75,6 +75,19 @@ function draftToRow(draft: OnboardingDraft) {
   };
 }
 
+// Whether onboarding has ever finished. This is the whole first-launch check: no row
+// means the user has never been through it, so there is no separate 'completed' flag to
+// keep in sync.
+export async function hasHousehold(db: SQLiteDatabase) {
+  // Only the id is selected — the question is whether the row exists, not what is in it.
+  const row = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM household WHERE id = ?',
+    HOUSEHOLD_ID
+  );
+
+  return row !== null;
+}
+
 // Saves everything onboarding collected. The first time this app writes to the database.
 export async function saveHousehold(db: SQLiteDatabase, draft: OnboardingDraft) {
   const row = draftToRow(draft);
