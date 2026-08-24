@@ -72,22 +72,29 @@ function ChecklistRow({
              arrives as 0 or 1. */}
       <Checkbox checked={item.done === 1} />
 
-      {/* 2. A View holding the two lines of text, stacked vertically (default View behavior). */}
+      {/* 2. Name and target on one line, reason underneath on its own full-width line.
+             The pill used to sit beside the whole text block, which squeezed the reason
+             into two lines on any item with a long one. */}
       <View style={styles.rowText}>
-        <ThemedText type="small">{item.name}</ThemedText>
+        <View style={styles.nameRow}>
+          <ThemedText type="small" style={styles.nameText}>
+            {item.name}
+          </ThemedText>
+
+          {/* Only items with a number get a pill. */}
+          {target !== null && (
+            <ThemedView type="backgroundSelected" style={styles.pill}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {target}
+              </ThemedText>
+            </ThemedView>
+          )}
+        </View>
+
         <ThemedText type="small" themeColor="textSecondary">
           {item.rationale}
         </ThemedText>
       </View>
-
-      {/* 3. The target pill, only for items that have a number. */}
-      {target !== null && (
-        <ThemedView type="backgroundSelected" style={styles.pill}>
-          <ThemedText type="small" themeColor="textSecondary">
-            {target}
-          </ThemedText>
-        </ThemedView>
-      )}
     </Pressable>
   );
 }
@@ -278,6 +285,14 @@ const styles = StyleSheet.create({
   },
   rowText: {
     flex: 1,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  nameText: {
+    flex: 1, // pushes the pill to the right edge and lets a long name wrap first
   },
   pill: {
     borderRadius: 16,
