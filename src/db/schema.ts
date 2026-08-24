@@ -9,7 +9,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 export const DATABASE_NAME = 'landfall.db';
 
 // Bump this by one every time a step is added to the ladder below.
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 4;
 
 /**
  * Brings a database file up to the current version. Runs once when the app starts.
@@ -103,10 +103,67 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     currentVersion = 2;
   }
 
+  // --- Step 3 ------------------------------------------------------------------------
+  if (currentVersion === 2) {
+    // The city and state the weather service reports back, like 'Plantation, FL'. It was
+    // already being fetched during onboarding and then thrown away — the row kept only
+    // the county and zone codes, which are no use to show anyone.
+    //
+    // A new rung rather than an edit to step 1: step 1 has already run on real phones,
+    // so changing it now would do nothing to them. This is the whole reason the ladder
+    // exists.
+    await db.execAsync(`
+      ALTER TABLE household ADD COLUMN place TEXT;
+    `);
+
+    currentVersion = 3;
+  }
+
+  // --- Step 4 ------------------------------------------------------------------------
+  if (currentVersion === 3) {
+    await db.execAsync(`
+      CREATE TABLE checklist_items (
+        id INTEGER PRIMARY KEY NOT NULL,
+
+        -- Which rule produced this row, like 'water' or 'flashlights'. It is how the
+        -- engine finds an item again to update it when the household changes size,
+        -- instead of adding a second water row. Null for anything the user typed.
+        template_id TEXT,
+
+        name TEXT NOT NULL,
+        category TEXT,
+
+        -- The short line under the name, like '1 gallon per person, per day'.
+        rationale TEXT,
+
+        -- Split on purpose. The screen shows '8 gallons', but a number and a unit kept
+        -- apart are what let the app compare what is stored against what is needed.
+        -- One combined string would look the same and answer nothing.
+        target_qty INTEGER,
+        unit TEXT,
+
+        -- 0 or 1. done_at is kept so Home can eventually say what moved this week.
+        done INTEGER NOT NULL DEFAULT 0,
+        done_at TEXT,
+
+        -- Items the user added themselves survive the engine re-running.
+        is_custom INTEGER NOT NULL DEFAULT 0,
+
+        -- The order the list is drawn in, so it does not shuffle between launches.
+        sort_order INTEGER NOT NULL DEFAULT 0,
+
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    currentVersion = 4;
+  }
+
   // --- Future steps go here ----------------------------------------------------------
-  //   if (currentVersion === 2) {
-  //     await db.execAsync(`CREATE TABLE checklist_items (...);`);
-  //     currentVersion = 3;
+  //   if (currentVersion === 4) {
+  //     await db.execAsync(`CREATE TABLE documents (...);`);
+  //     currentVersion = 5;
   //   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

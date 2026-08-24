@@ -16,12 +16,12 @@ const INSERT_HOUSEHOLD = `
   INSERT OR REPLACE INTO household (
     id, name, adults, kids, pets, pet_types,
     has_medical_needs, medical_notes, home_type, zip_code,
-    county, nws_zone_id, nws_office, latitude, longitude,
+    county, nws_zone_id, nws_office, latitude, longitude, place,
     created_at, updated_at
   ) VALUES (
     $id, $name, $adults, $kids, $pets, $pet_types,
     $has_medical_needs, $medical_notes, $home_type, $zip_code,
-    $county, $nws_zone_id, $nws_office, $latitude, $longitude,
+    $county, $nws_zone_id, $nws_office, $latitude, $longitude, $place,
     $created_at, $updated_at
   )
 `;
@@ -35,10 +35,15 @@ function draftToRow(draft: OnboardingDraft) {
   let county = null;
   let zoneId = null;
   let office = null;
+  let place = null;
   if (draft.point !== null) {
     county = draft.point.county;
     zoneId = draft.point.zoneId;
     office = draft.point.office;
+
+    // The only human-readable part of the reply — county and office are codes like FLC011
+    // and MFL. Stored joined because 'Plantation, FL' is the only form anything displays.
+    place = draft.point.city + ', ' + draft.point.state;
   }
 
   // PointData carries no coordinates, so they come back out of the bundled ZIP table.
@@ -70,6 +75,7 @@ function draftToRow(draft: OnboardingDraft) {
     nws_office: office,
     latitude: latitude,
     longitude: longitude,
+    place: place,
     created_at: now,
     updated_at: now,
   };
@@ -94,6 +100,7 @@ export type Household = {
   nws_office: string | null;
   latitude: number | null;
   longitude: number | null;
+  place: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -140,6 +147,7 @@ export async function saveHousehold(db: SQLiteDatabase, draft: OnboardingDraft) 
     $nws_office: row.nws_office,
     $latitude: row.latitude,
     $longitude: row.longitude,
+    $place: row.place,
     $created_at: row.created_at,
     $updated_at: row.updated_at,
   });

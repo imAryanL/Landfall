@@ -14,6 +14,7 @@ import { OnboardingHeader, TOTAL_STEPS } from '@/components/onboarding/onboardin
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
+import { saveChecklist } from '@/db/checklist';
 import { saveHousehold } from '@/db/household';
 import { saveInventory } from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
@@ -49,7 +50,11 @@ export default function SummaryScreen() {
 
     await saveHousehold(db, draft);
 
-    // Screen 4's supplies, which until now were shown in the summary and saved nowhere.
+    // The checklist goes first: the inventory rows point at it, so its rows have to
+    // exist before they can be referenced.
+    await saveChecklist(db, draft);
+
+    // Screen 4's supplies, linked to the checklist items they stock.
     await saveInventory(db, draft);
 
     // replace, not push — onboarding is done, so the back gesture must not return into it.

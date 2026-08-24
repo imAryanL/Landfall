@@ -3,8 +3,9 @@
 // row are all still mock — each one needs an engine that does not exist yet.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,6 +13,7 @@ import { ReadinessRing } from '@/components/readiness-ring';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
+import { getChecklistProgress, type ChecklistProgress } from '@/db/checklist';
 import { getHousehold, type Household } from '@/db/household';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -20,12 +22,22 @@ import { useTheme } from '@/hooks/use-theme';
 // what's in the document vault, and whether alerts are set up for a county.
 // Every design mockup we looked at used "Plan" and "Home" instead — but the app has no
 // plan feature and no home-condition feature, so those numbers would be invented.
-const BREAKDOWN = [
-  { label: 'Supplies', percent: 68 },
-  { label: 'Checklist', percent: 79 },
-  { label: 'Documents', percent: 40 },
-  { label: 'Alerts', percent: 100 },
-];
+// Only Checklist is real so far. Supplies needs a link from a stored item to the target
+// it stocks, Documents has no table yet, and the alerts permission lives in iOS and was
+// deliberately never copied into the database. Those three are still last July's numbers.
+function buildBreakdown(progress: ChecklistProgress | null) {
+  let checklistPercent = 0;
+  if (progress !== null && progress.total > 0) {
+    checklistPercent = Math.round((progress.done / progress.total) * 100);
+  }
+
+  return [
+    { label: 'Supplies', percent: 68 },
+    { label: 'Checklist', percent: checklistPercent },
+    { label: 'Documents', percent: 40 },
+    { label: 'Alerts', percent: 100 },
+  ];
+}
 
 // Each row carries an icon so it's readable at a glance, and every row has to point at
 // a real screen — a chevron that opens nothing is a promise the app doesn't keep. Both
@@ -46,11 +58,24 @@ const NEEDS_ATTENTION = [
 // The current storm status, mirrored from the Alerts tab. Home shows one line and links
 // across rather than repeating the whole alert card — Alerts stays the single place
 // storm information lives, so there's only ever one copy to keep correct.
+// Still mock: the label needs the alert pipeline, which is the last thing being built.
+// Only the location under it is real now, and it comes from the saved household.
 const STORM_STATUS = {
   severity: 'watch' as 'calm' | 'watch' | 'warning',
   label: 'Tropical Storm Watch in effect',
-  detail: 'Broward County · National Weather Service',
 };
+
+// City and state, never the county — a county name is right for hundreds of ZIPs that
+// aren't yours, and the weather service only returns it as a code anyway. A household
+// that finished onboarding with no signal has no place saved, so the attribution stands
+// on its own rather than showing a gap.
+function buildStormDetail(place: string | null) {
+  if (place === null || place === '') {
+    return 'National Weather Service';
+  }
+
+  return place + ' · National Weather Service';
+}
 
 function BreakdownBar({ label, percent }: { label: string; percent: number }) {
   return (
@@ -95,18 +120,30 @@ export default function HomeScreen() {
   // Null until the read comes back. The gate guarantees a row exists by the time Home
   // renders, so this is only ever 'not loaded yet', never 'no household'.
   const [household, setHousehold] = useState<Household | null>(null);
+  const [progress, setProgress] = useState<ChecklistProgress | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setHousehold(await getHousehold(db));
-    }
+  // Not useEffect: tab screens stay mounted, so an effect that runs on mount would read
+  // once at launch and never again — tick something on the Checklist tab and this screen
+  // would still be showing the old number. useFocusEffect runs every time the tab is
+  // opened.
+  useFocusEffect(
+    // The callback has to be memoised. Without useCallback it is a new function on every
+    // render, which re-runs the effect, which sets state, which renders again.
+    useCallback(() => {
+      async function load() {
+        setHousehold(await getHousehold(db));
+        setProgress(await getChecklistProgress(db));
+      }
 
-    load();
-  }, [db]);
+      load();
+    }, [db])
+  );
+
+  const breakdown = buildBreakdown(progress);
 
   // Build the four breakdown bars with a plain loop.
   const breakdownBars = [];
-  for (const item of BREAKDOWN) {
+  for (const item of breakdown) {
     breakdownBars.push(
       <BreakdownBar key={item.label} label={item.label} percent={item.percent} />
     );
@@ -247,7 +284,7 @@ export default function HomeScreen() {
             <View style={styles.stormText}>
               <ThemedText type="smallBold">{STORM_STATUS.label}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {STORM_STATUS.detail}
+                {buildStormDetail(household?.place ?? null)}
               </ThemedText>
             </View>
 
