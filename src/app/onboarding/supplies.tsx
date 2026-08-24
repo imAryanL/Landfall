@@ -16,7 +16,7 @@ const CURRENT_STEP = 3;
 
 // All ten are on Florida's official disaster supply checklist. No icons and no subtext,
 // so they fit two per line without scrolling.
-const SUPPLY_SECTIONS = [
+export const SUPPLY_SECTIONS = [
   {
     title: 'Water & food',
     items: [

@@ -15,6 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { saveHousehold } from '@/db/household';
+import { saveInventory } from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
 
 const CURRENT_STEP = 5;
@@ -47,6 +48,9 @@ export default function SummaryScreen() {
     setSaving(true);
 
     await saveHousehold(db, draft);
+
+    // Screen 4's supplies, which until now were shown in the summary and saved nowhere.
+    await saveInventory(db, draft);
 
     // replace, not push — onboarding is done, so the back gesture must not return into it.
     router.replace('/(tabs)');
