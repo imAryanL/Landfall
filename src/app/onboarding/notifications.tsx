@@ -15,6 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { formatPlace } from '@/lib/nws';
 
 const CURRENT_STEP = 4;
 
@@ -52,9 +53,7 @@ export default function NotificationsScreen() {
   if (draft.point !== null) {
     subtitle =
       'Just two kinds of notifications, and only about ' +
-      draft.point.city +
-      ', ' +
-      draft.point.state +
+      formatPlace(draft.point) +
       '.';
   }
 

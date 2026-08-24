@@ -26,7 +26,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchPointData } from '@/lib/nws';
+import { fetchPointData, formatPlace } from '@/lib/nws';
 import { lookupZip } from '@/lib/zip-lookup';
 
 const CURRENT_STEP = 2;
@@ -86,7 +86,7 @@ export default function LocationScreen() {
     // The whole reply is kept, not just the city. Screen 6 needs the county, zone and
     // office out of it to fill their columns.
     updateDraft({ point });
-    setLookup({ zip: zipCode, status: 'found', place: point.city + ', ' + point.state });
+    setLookup({ zip: zipCode, status: 'found', place: formatPlace(point) });
   }
 
   // The number pad still offers characters we don't want stored, so anything that isn't a

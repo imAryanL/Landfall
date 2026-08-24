@@ -18,6 +18,7 @@ import { saveChecklist } from '@/db/checklist';
 import { saveHousehold } from '@/db/household';
 import { saveInventory } from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
+import { formatPlace } from '@/lib/nws';
 
 const CURRENT_STEP = 5;
 
@@ -80,7 +81,7 @@ export default function SummaryScreen() {
   // The city only exists if the NWS lookup landed, so offline falls back to the ZIP itself.
   let homeValue = draft.zip;
   if (draft.point !== null) {
-    homeValue = draft.point.city + ', ' + draft.point.state;
+    homeValue = formatPlace(draft.point);
   }
   for (const home of HOME_TYPES) {
     if (home.id === draft.homeType) {

@@ -4,6 +4,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { OnboardingDraft } from '@/components/onboarding/onboarding-draft';
+import { formatPlace } from '@/lib/nws';
 import { lookupZip } from '@/lib/zip-lookup';
 
 // There is only ever one household, so the row always uses the same id. That also makes a
@@ -43,7 +44,7 @@ function draftToRow(draft: OnboardingDraft) {
 
     // The only human-readable part of the reply — county and office are codes like FLC011
     // and MFL. Stored joined because 'Plantation, FL' is the only form anything displays.
-    place = draft.point.city + ', ' + draft.point.state;
+    place = formatPlace(draft.point);
   }
 
   // PointData carries no coordinates, so they come back out of the bundled ZIP table.

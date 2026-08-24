@@ -16,6 +16,12 @@ export type PointData = {
   state: string;
 };
 
+// "Plantation, FL". The only readable part of a lookup — county and office come back as
+// codes. Four different places needed this joined, so it lives beside the type.
+export function formatPlace(point: PointData): string {
+  return point.city + ", " + point.state;
+}
+
 // The API is JSON-LD, so these come back as full URLs and we only want the ID on the end.
 function lastPart(url: string): string {
   const parts = url.split("/");
