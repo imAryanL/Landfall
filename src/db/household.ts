@@ -75,6 +75,38 @@ function draftToRow(draft: OnboardingDraft) {
   };
 }
 
+// One saved household, exactly as the table stores it. The field names are snake_case
+// because that is what SQLite hands back — converting them would mean a mapping layer
+// that has to be kept in step with the columns for no real gain.
+export type Household = {
+  id: number;
+  name: string | null;
+  adults: number;
+  kids: number;
+  pets: number;
+  pet_types: string | null;
+  has_medical_needs: number;
+  medical_notes: string | null;
+  home_type: string | null;
+  zip_code: string | null;
+  county: string | null;
+  nws_zone_id: string | null;
+  nws_office: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// The saved household, or null if onboarding never ran. Screens that only need to know
+// whether it exists should use hasHousehold instead of pulling every column.
+export async function getHousehold(db: SQLiteDatabase) {
+  return db.getFirstAsync<Household>(
+    'SELECT * FROM household WHERE id = ?',
+    HOUSEHOLD_ID
+  );
+}
+
 // Whether onboarding has ever finished. This is the whole first-launch check: no row
 // means the user has never been through it, so there is no separate 'completed' flag to
 // keep in sync.

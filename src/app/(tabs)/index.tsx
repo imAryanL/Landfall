@@ -1,7 +1,10 @@
 // Home screen — greeting, readiness score ring, and category breakdown.
-// Uses placeholder/mock data for now; will connect to the real local database once it exists.
+// The greeting is real now. The score, the breakdown bars, Needs Attention and the storm
+// row are all still mock — each one needs an engine that does not exist yet.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,6 +12,7 @@ import { ReadinessRing } from '@/components/readiness-ring';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
+import { getHousehold, type Household } from '@/db/household';
 import { useTheme } from '@/hooks/use-theme';
 
 // The four parts of the readiness score. These are deliberately the only four things
@@ -64,8 +68,41 @@ function BreakdownBar({ label, percent }: { label: string; percent: number }) {
   );
 }
 
+// Morning until noon, afternoon until six, evening after that. The name is optional on
+// the onboarding screen, so an empty one drops the whole clause rather than greeting a
+// blank.
+function buildGreeting(name: string | null) {
+  const hour = new Date().getHours();
+
+  let timeOfDay = 'evening';
+  if (hour < 12) {
+    timeOfDay = 'morning';
+  } else if (hour < 18) {
+    timeOfDay = 'afternoon';
+  }
+
+  if (name === null || name === '') {
+    return `Good ${timeOfDay}.`;
+  }
+
+  return `Good ${timeOfDay}, ${name}.`;
+}
+
 export default function HomeScreen() {
   const theme = useTheme();
+  const db = useSQLiteContext();
+
+  // Null until the read comes back. The gate guarantees a row exists by the time Home
+  // renders, so this is only ever 'not loaded yet', never 'no household'.
+  const [household, setHousehold] = useState<Household | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      setHousehold(await getHousehold(db));
+    }
+
+    load();
+  }, [db]);
 
   // Build the four breakdown bars with a plain loop.
   const breakdownBars = [];
@@ -140,7 +177,7 @@ export default function HomeScreen() {
                 row pattern the Alerts header uses. Settings lives here rather than
                 taking a 5th tab slot. Not wired yet; there's no screen to open. */}
             <View style={styles.titleRow}>
-              <ThemedText style={styles.greeting}>Good evening, Aryan.</ThemedText>
+              <ThemedText style={styles.greeting}>{buildGreeting(household?.name ?? null)}</ThemedText>
               {/* The circle isn't only decoration — a bare icon is a smaller tap target
                   than Apple's 44pt minimum. The padding around it is what makes the gear
                   comfortably tappable once it's wired up. */}
