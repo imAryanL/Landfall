@@ -134,3 +134,17 @@ export async function getChecklistIdsByTemplate(db: SQLiteDatabase) {
 
   return byTemplate;
 }
+
+// Which checklist items ask for a number. Owning water doesn't finish 25 gallons.
+export async function getTargetTemplateIds(db: SQLiteDatabase) {
+  const rows = await db.getAllAsync<{ template_id: string }>(
+    'SELECT template_id FROM checklist_items WHERE target_qty IS NOT NULL'
+  );
+
+  const ids = [];
+  for (const row of rows) {
+    ids.push(row.template_id);
+  }
+
+  return ids;
+}

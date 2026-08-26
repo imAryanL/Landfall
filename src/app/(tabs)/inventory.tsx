@@ -1,42 +1,76 @@
-// Inventory tab — a list of your emergency supplies (quantities, storage, expiration).
-// Building it up one piece at a time; mock data for now.
+// Inventory tab — the supplies you have on hand, read from the database.
+// Storage locations and expiration dates have nowhere to come from yet, so neither shows.
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ComponentProps } from "react";
+import { useFocusEffect } from "expo-router";
+import { useSQLiteContext } from "expo-sqlite";
+import { ComponentProps, useCallback, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from "@/constants/theme";
+import { getInventory, type InventoryItemRow } from "@/db/inventory";
 import { useTheme } from "@/hooks/use-theme";
 
 // The set of valid MaterialCommunityIcons names (so TypeScript checks our icon spelling).
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
-// The shape of one supply item.
-type InventoryItem = {
-  id: string;
-  name: string;
-  icon: IconName; // which category icon to show, e.g. "water"
-  quantity: string; // on-hand vs target, e.g. "3 / 8 gal"
-  category: string; // e.g. "Water & Food"
-  location: string; // where it's kept, e.g. "Garage shelf B"
-  // Expiration note. `soon: true` shows it in amber; null = nothing to show (non-perishable).
-  expiry: { label: string; soon: boolean } | null;
+// Which icon each supply gets, keyed by template_id rather than name, so renaming a
+// label can't break the icon. There is no can opener in the icon set — cutlery is the
+// closest thing to it.
+const ICONS: Record<string, IconName> = {
+  water: "water",
+  food: "food-variant",
+  can_opener: "silverware-fork-knife",
+  flashlights: "flashlight",
+  batteries: "battery",
+  radio: "radio",
+  first_aid: "medical-bag",
+  medicines: "pill",
+  cash: "cash",
+  documents: "file-document-outline",
 };
 
-// Fake supply data for now — later this comes from the local database.
-const ITEMS: InventoryItem[] = [
-  { id: "water", name: "Drinking water", icon: "water", quantity: "3 / 8 gal", category: "Water & Food", location: "Garage shelf B", expiry: { label: "Expires in 6 days", soon: true } },
-  { id: "food", name: "Canned food", icon: "food-variant", quantity: "9 / 9 meals", category: "Water & Food", location: "Pantry", expiry: { label: "Good until Aug 2027", soon: false } },
-  { id: "batteries", name: "AA batteries", icon: "battery", quantity: "8 / 12", category: "Power & Light", location: "Kitchen drawer", expiry: { label: "Expires in 12 days", soon: true } },
-  { id: "flashlights", name: "Flashlights", icon: "flashlight", quantity: "2 / 2", category: "Power & Light", location: "Hall closet", expiry: null },
-  { id: "first-aid", name: "First-aid kit", icon: "medical-bag", quantity: "1 / 1", category: "Medical & Safety", location: "Bathroom cabinet", expiry: { label: "Good until 2028", soon: false } },
-];
+// Anything with no checklist link — an item the user adds themselves later — gets a box.
+const FALLBACK_ICON: IconName = "package-variant-closed";
+
+function iconFor(item: InventoryItemRow) {
+  if (item.template_id === null) {
+    return FALLBACK_ICON;
+  }
+
+  return ICONS[item.template_id] ?? FALLBACK_ICON;
+}
+
+// The pill text. With no target the number stands alone — '1 / 1' would invent a goal the
+// checklist never set. The unit is separate because a target can exist without one:
+// flashlights need 3, measured in nothing.
+function quantityLabel(item: InventoryItemRow) {
+  if (item.target_qty === null) {
+    return `${item.quantity}`;
+  }
+
+  if (item.unit === null) {
+    return `${item.quantity} / ${item.target_qty}`;
+  }
+
+  return `${item.quantity} / ${item.target_qty} ${item.unit}`;
+}
+
+// Category on its own until the item has a storage location. Onboarding never asks for
+// one, so every row starts without it.
+function metaLabel(item: InventoryItemRow) {
+  if (item.storage_location === null) {
+    return item.category;
+  }
+
+  return `${item.category} · ${item.storage_location}`;
+}
 
 // One supply card — a category icon on the left, then the item's details on the right.
-function InventoryCard({ item }: { item: InventoryItem }) {
+function InventoryCard({ item }: { item: InventoryItemRow }) {
   // Get the theme so the icon can use our green (theme.primary).
   const theme = useTheme();
 
@@ -46,7 +80,7 @@ function InventoryCard({ item }: { item: InventoryItem }) {
       <View style={styles.cardRow}>
         {/* Leading icon in a soft-green circle. */}
         <ThemedView type="backgroundSelected" style={styles.iconCircle}>
-          <MaterialCommunityIcons name={item.icon} size={22} color={theme.primary} />
+          <MaterialCommunityIcons name={iconFor(item)} size={22} color={theme.primary} />
         </ThemedView>
 
         {/* Content column takes the remaining width (flex: 1). */}
@@ -56,26 +90,15 @@ function InventoryCard({ item }: { item: InventoryItem }) {
             <ThemedText type="smallBold">{item.name}</ThemedText>
             <ThemedView type="backgroundSelected" style={styles.pill}>
               <ThemedText type="small" themeColor="textSecondary">
-                {item.quantity}
+                {quantityLabel(item)}
               </ThemedText>
             </ThemedView>
           </View>
 
-          {/* Meta line: category and where it's stored, in muted text. */}
+          {/* Meta line: category, plus the storage location once the item has one. */}
           <ThemedText type="small" themeColor="textSecondary">
-            {item.category} · {item.location}
+            {metaLabel(item)}
           </ThemedText>
-
-          {/* Expiration line. Only shown if the item has one (non-perishables are null).
-              Amber when expiring soon, calm muted text otherwise — never red. */}
-          {item.expiry && (
-            <ThemedText
-              type="small"
-              themeColor={item.expiry.soon ? "warning" : "textSecondary"}
-            >
-              {item.expiry.label}
-            </ThemedText>
-          )}
         </View>
 
         {/* Muted chevron hinting the whole card is tappable (opens the detail screen later). */}
@@ -86,21 +109,26 @@ function InventoryCard({ item }: { item: InventoryItem }) {
 }
 
 export default function InventoryScreen() {
-  // Get the theme so the amber pill can use our warning colors.
-  const theme = useTheme();
+  const db = useSQLiteContext();
+  const [items, setItems] = useState<InventoryItemRow[]>([]);
+
+  // Tab screens stay mounted, so a plain useEffect would read once at launch and never
+  // again. useFocusEffect re-reads every time the tab is opened, same as Home.
+  useFocusEffect(
+    // Memoised, or the callback is a new function every render and the effect loops.
+    useCallback(() => {
+      async function load() {
+        setItems(await getInventory(db));
+      }
+
+      load();
+    }, [db])
+  );
 
   // Build one card per supply item, in order.
   const cards = [];
-  for (const item of ITEMS) {
+  for (const item of items) {
     cards.push(<InventoryCard key={item.id} item={item} />);
-  }
-
-  // Count how many supplies are expiring soon (shown as an amber pill in the header).
-  let expiringCount = 0;
-  for (const item of ITEMS) {
-    if (item.expiry && item.expiry.soon) {
-      expiringCount = expiringCount + 1;
-    }
   }
 
   return (
@@ -114,15 +142,8 @@ export default function InventoryScreen() {
             <ThemedText type="small" themeColor="textSecondary">
               What you have on hand
             </ThemedText>
-            {/* Amber pill — only shows when something is expiring soon. Calm days stay clean. */}
-            {expiringCount > 0 && (
-              <View style={[styles.expiringPill, { backgroundColor: theme.warningBackground }]}>
-                <MaterialCommunityIcons name="clock-alert-outline" size={14} color={theme.warning} />
-                <ThemedText type="small" themeColor="warning">
-                  {expiringCount} expiring soon
-                </ThemedText>
-              </View>
-            )}
+            {/* The amber 'expiring soon' pill lives here. Nothing can set an expiration
+                date yet, so counting them would mean inventing them. */}
           </View>
 
           {/* All the supply cards we built above. */}
