@@ -1,8 +1,8 @@
-// Home screen — greeting, readiness score ring, and category breakdown.
-// The greeting is real now. The score, the breakdown bars, Needs Attention and the storm
-// row are all still mock — each one needs an engine that does not exist yet.
+// Home screen — greeting, readiness ring, category breakdown, storm row.
+// Real so far: the greeting, the Checklist bar and the Alerts bar. The rest is mock.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
@@ -17,31 +17,36 @@ import { getChecklistProgress, type ChecklistProgress } from '@/db/checklist';
 import { getHousehold, type Household } from '@/db/household';
 import { useTheme } from '@/hooks/use-theme';
 
-// The four parts of the readiness score. These are deliberately the only four things
-// v1 can actually measure from real data: what's in the inventory, what's checked off,
-// what's in the document vault, and whether alerts are set up for a county.
-// Every design mockup we looked at used "Plan" and "Home" instead — but the app has no
-// plan feature and no home-condition feature, so those numbers would be invented.
-// Only Checklist is real so far. Supplies needs a link from a stored item to the target
-// it stocks, Documents has no table yet, and the alerts permission lives in iOS and was
-// deliberately never copied into the database. Those three are still last July's numbers.
-function buildBreakdown(progress: ChecklistProgress | null) {
+// The only four things v1 can measure without inventing a number.
+// Supplies and Documents are still hardcoded — neither has the data behind it yet.
+function buildBreakdown(
+  progress: ChecklistProgress | null,
+  household: Household | null,
+  notificationsGranted: boolean
+) {
   let checklistPercent = 0;
   if (progress !== null && progress.total > 0) {
     checklistPercent = Math.round((progress.done / progress.total) * 100);
+  }
+
+  // Both halves have to be true for an alert to land: a zone to watch, and iOS permission.
+  let alertsPercent = 0;
+  if (household !== null && household.nws_zone_id !== null) {
+    alertsPercent += 50;
+  }
+  if (notificationsGranted) {
+    alertsPercent += 50;
   }
 
   return [
     { label: 'Supplies', percent: 68 },
     { label: 'Checklist', percent: checklistPercent },
     { label: 'Documents', percent: 40 },
-    { label: 'Alerts', percent: 100 },
+    { label: 'Alerts', percent: alertsPercent },
   ];
 }
 
-// Each row carries an icon so it's readable at a glance, and every row has to point at
-// a real screen — a chevron that opens nothing is a promise the app doesn't keep. Both
-// of these are inventory problems (a quantity and an expiration), so both go there.
+// Mock until quantities and expiry dates are real.
 const NEEDS_ATTENTION = [
   {
     title: 'Water supply is low',
@@ -55,20 +60,13 @@ const NEEDS_ATTENTION = [
   },
 ];
 
-// The current storm status, mirrored from the Alerts tab. Home shows one line and links
-// across rather than repeating the whole alert card — Alerts stays the single place
-// storm information lives, so there's only ever one copy to keep correct.
-// Still mock: the label needs the alert pipeline, which is the last thing being built.
-// Only the location under it is real now, and it comes from the saved household.
+// Mock until the alert pipeline lands. Home mirrors one line; Alerts owns the full card.
 const STORM_STATUS = {
   severity: 'watch' as 'calm' | 'watch' | 'warning',
   label: 'Tropical Storm Watch in effect',
 };
 
-// City and state, never the county — a county name is right for hundreds of ZIPs that
-// aren't yours, and the weather service only returns it as a code anyway. A household
-// that finished onboarding with no signal has no place saved, so the attribution stands
-// on its own rather than showing a gap.
+// City and state, never the county — a county name is right for hundreds of ZIPs that aren't yours.
 function buildStormDetail(place: string | null) {
   if (place === null || place === '') {
     return 'National Weather Service';
@@ -93,9 +91,7 @@ function BreakdownBar({ label, percent }: { label: string; percent: number }) {
   );
 }
 
-// Morning until noon, afternoon until six, evening after that. The name is optional on
-// the onboarding screen, so an empty one drops the whole clause rather than greeting a
-// blank.
+// The name is optional in onboarding, so an empty one drops the whole clause.
 function buildGreeting(name: string | null) {
   const hour = new Date().getHours();
 
@@ -117,31 +113,32 @@ export default function HomeScreen() {
   const theme = useTheme();
   const db = useSQLiteContext();
 
-  // Null until the read comes back. The gate guarantees a row exists by the time Home
-  // renders, so this is only ever 'not loaded yet', never 'no household'.
+  // Null only ever means 'not read yet' — the gate guarantees a row exists.
   const [household, setHousehold] = useState<Household | null>(null);
   const [progress, setProgress] = useState<ChecklistProgress | null>(null);
 
-  // Not useEffect: tab screens stay mounted, so an effect that runs on mount would read
-  // once at launch and never again — tick something on the Checklist tab and this screen
-  // would still be showing the old number. useFocusEffect runs every time the tab is
-  // opened.
+  // Lives in iOS, not the database, so it gets re-read every time the tab is focused.
+  const [notificationsGranted, setNotificationsGranted] = useState(false);
+
+  // useFocusEffect, not useEffect: tab screens stay mounted, so a mount effect would read
+  // once at launch and never again.
   useFocusEffect(
-    // The callback has to be memoised. Without useCallback it is a new function on every
-    // render, which re-runs the effect, which sets state, which renders again.
+    // Memoised, or the effect re-runs on every render.
     useCallback(() => {
       async function load() {
         setHousehold(await getHousehold(db));
         setProgress(await getChecklistProgress(db));
+
+        const permission = await Notifications.getPermissionsAsync();
+        setNotificationsGranted(permission.granted);
       }
 
       load();
     }, [db])
   );
 
-  const breakdown = buildBreakdown(progress);
+  const breakdown = buildBreakdown(progress, household, notificationsGranted);
 
-  // Build the four breakdown bars with a plain loop.
   const breakdownBars = [];
   for (const item of breakdown) {
     breakdownBars.push(
@@ -149,11 +146,7 @@ export default function HomeScreen() {
     );
   }
 
-  // The dot follows the severity ladder: green when calm, amber for a watch, red for a
-  // warning. Only the dot takes the color — Home keeps neutral surfaces, because a red
-  // card on the home screen would spend the loudest color the app has on a pointer.
-  // Typed as string on purpose: without it TypeScript locks the variable to the exact
-  // green it was created with, and the two reassignments below become errors.
+  // Typed as string so the reassignments below aren't locked to the green it starts as.
   let stormDotColor: string = theme.primary;
   if (STORM_STATUS.severity === 'watch') {
     stormDotColor = theme.warningFill;
@@ -167,8 +160,6 @@ export default function HomeScreen() {
   const attentionLabel =
     attentionCount === 1 ? '1 item' : `${attentionCount} items`;
 
-  // Build the amber cards with a plain loop: icon, the two lines of text, then a
-  // chevron on the right showing the row opens something.
   const attentionCards = [];
   for (const item of NEEDS_ATTENTION) {
     attentionCards.push(
@@ -183,7 +174,6 @@ export default function HomeScreen() {
           color={theme.warning}
         />
 
-        {/* flex: 1 lets the text take the middle, pushing the chevron to the edge. */}
         <View style={styles.warningCardText}>
           <ThemedText type="smallBold" themeColor="warning">
             {item.title}
@@ -206,18 +196,10 @@ export default function HomeScreen() {
     <ThemedView style={{ flex: 1 }}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Header: the serif greeting, then a one-line read on where the household
-              stands. The summary is mock for now — the real one gets built from the
-              score plus whether an alert is active. */}
           <View style={styles.header}>
-            {/* Greeting on the left, settings gear pushed to the far right — the same
-                row pattern the Alerts header uses. Settings lives here rather than
-                taking a 5th tab slot. Not wired yet; there's no screen to open. */}
+            {/* Settings lives on this row rather than taking a 5th tab. Not wired yet. */}
             <View style={styles.titleRow}>
               <ThemedText style={styles.greeting}>{buildGreeting(household?.name ?? null)}</ThemedText>
-              {/* The circle isn't only decoration — a bare icon is a smaller tap target
-                  than Apple's 44pt minimum. The padding around it is what makes the gear
-                  comfortably tappable once it's wired up. */}
               <View
                 style={[
                   styles.settingsButton,
@@ -236,27 +218,22 @@ export default function HomeScreen() {
             </View>
 
             {/* Fact, then classification, then reassurance — reassurance last, because
-                that's the part people hold onto. */}
+                that's the part people hold onto. Mock for now. */}
             <ThemedText themeColor="textSecondary" style={styles.summary}>
               There&apos;s a watch out, and you&apos;re in good shape. Still time
               to prepare calmly.
             </ThemedText>
           </View>
 
-          {/* Readiness card — the score and the four things that make it up, together
-              in one card. They used to be two separate blocks, which said the same
-              thing twice; side by side, the bars explain where the number came from. */}
+          {/* Score and bars share one card: apart they said the same thing twice. */}
           <ThemedView type="backgroundElement" style={styles.card}>
             <View style={styles.readinessRow}>
               <ReadinessRing score={72} size={124} width={11} />
 
-              {/* flex: 1 makes the bars take whatever width is left after the ring,
-                  so this keeps working on a narrow phone or a wide tablet. */}
               <View style={styles.breakdownColumn}>{breakdownBars}</View>
             </View>
 
-            {/* Says where the number came from. A score with no explanation reads as
-                arbitrary — this one is built from the user's own data, so say so. */}
+            {/* A score with no explanation reads as arbitrary. */}
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <ThemedText themeColor="textSecondary" style={styles.cardFootnote}>
               Built from your checklist and supplies — updates as you pack.
@@ -264,7 +241,6 @@ export default function HomeScreen() {
           </ThemedView>
 
           <View style={styles.needsAttentionSection}>
-            {/* Heading on the left, how many things need doing on the right. */}
             <View style={styles.sectionHeaderRow}>
               <ThemedText type="smallBold">Needs attention</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
@@ -275,9 +251,7 @@ export default function HomeScreen() {
             {attentionCards}
           </View>
 
-          {/* Storm status — one row that points into the Alerts tab, not a second copy
-              of the alert card. Keeps Home a dashboard and leaves Alerts as the one
-              screen that owns storm information. */}
+          {/* One row pointing into Alerts, not a second copy of the alert card. */}
           <ThemedView type="backgroundElement" style={styles.stormRow}>
             <View style={[styles.stormDot, { backgroundColor: stormDotColor }]} />
 
@@ -314,32 +288,31 @@ const styles = StyleSheet.create({
   },
   header: {
     marginTop: Spacing.two,
-    gap: Spacing.two, // space between the greeting and the line under it
+    gap: Spacing.two,
   },
   titleRow: {
-    flexDirection: 'row', // greeting and gear side by side
+    flexDirection: 'row',
     alignItems: 'flex-start', // keeps the gear on the first line when the title wraps
     gap: Spacing.three,
   },
   greeting: {
-    flex: 1, // takes the space left of the gear, so a long greeting wraps instead of
-    // pushing the gear off the edge of the screen
-    fontFamily: Fonts.serif, // same serif title treatment as the other three screens
+    flex: 1, // a long greeting wraps instead of pushing the gear off screen
+    fontFamily: Fonts.serif,
     fontSize: 32,
     lineHeight: 38,
     fontWeight: '500',
   },
   settingsButton: {
-    width: 44, // Apple's minimum comfortable tap target
+    width: 44, // Apple's minimum tap target
     height: 44,
-    borderRadius: 22, // half the width makes it a circle
-    borderWidth: 2, // white on the light gray background is nearly invisible on its own
-    alignItems: 'center', // centers the gear horizontally
-    justifyContent: 'center', // and vertically
+    borderRadius: 22,
+    borderWidth: 2, // white on light grey is nearly invisible without it
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: -3, // (38 line height - 44 circle) / 2, so it centers on the first line
   },
   summary: {
-    lineHeight: 24, // roomy, so the wrapped second line doesn't feel cramped
+    lineHeight: 24,
   },
   card: {
     borderRadius: Spacing.four,
@@ -347,16 +320,16 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   readinessRow: {
-    flexDirection: 'row', // ring on the left, bars on the right
-    alignItems: 'center', // centers the ring against the stack of bars
-    gap: Spacing.four, // breathing room between the ring and the bars
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.four,
   },
   breakdownColumn: {
-    flex: 1, // takes all the width left over after the ring
-    gap: Spacing.two, // even spacing between the four bars
+    flex: 1, // takes whatever width is left after the ring
+    gap: Spacing.two,
   },
   stormRow: {
-    flexDirection: 'row', // dot, text, chevron in a row
+    flexDirection: 'row',
     alignItems: 'center',
     borderRadius: Spacing.four,
     padding: Spacing.three,
@@ -365,10 +338,10 @@ const styles = StyleSheet.create({
   stormDot: {
     width: 10,
     height: 10,
-    borderRadius: 5, // half the width makes it a circle
+    borderRadius: 5,
   },
   stormText: {
-    flex: 1, // takes the middle, pushing the chevron to the far edge
+    flex: 1, // pushes the chevron to the far edge
     gap: Spacing.half,
   },
   needsAttentionSection: {
@@ -378,24 +351,24 @@ const styles = StyleSheet.create({
     height: 1,
   },
   cardFootnote: {
-    fontSize: 12, // the quietest line in the card — it explains, it doesn't announce
+    fontSize: 12,
     lineHeight: 17,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', // heading left, count pushed to the right
+    justifyContent: 'space-between',
     marginBottom: Spacing.one,
   },
   warningCard: {
-    flexDirection: 'row', // icon, text, chevron in a row
-    alignItems: 'center', // vertically centers the icons against the two lines of text
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: Spacing.four,
     padding: Spacing.three,
     gap: Spacing.three,
   },
   warningCardText: {
-    flex: 1, // takes the middle, so the chevron sits at the far edge
+    flex: 1, // pushes the chevron to the far edge
     gap: Spacing.half,
   },
   breakdownRow: {
