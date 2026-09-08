@@ -2,10 +2,10 @@
 // Storage locations and expiration dates have nowhere to come from yet, so neither shows.
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
 import { ComponentProps, useCallback, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
@@ -36,7 +36,7 @@ const ICONS: Record<string, IconName> = {
 // Anything with no checklist link — an item the user adds themselves later — gets a box.
 const FALLBACK_ICON: IconName = "package-variant-closed";
 
-function iconFor(item: InventoryItemRow) {
+export function iconFor(item: InventoryItemRow) {
   if (item.template_id === null) {
     return FALLBACK_ICON;
   }
@@ -75,36 +75,48 @@ function InventoryCard({ item }: { item: InventoryItemRow }) {
   const theme = useTheme();
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
-      {/* Whole card is a horizontal row: icon circle on the left, content column on the right. */}
-      <View style={styles.cardRow}>
-        {/* Leading icon in a soft-green circle. */}
-        <ThemedView type="backgroundSelected" style={styles.iconCircle}>
-          <MaterialCommunityIcons name={iconFor(item)} size={22} color={theme.primary} />
-        </ThemedView>
+    // The whole card is the tap target, which is what the chevron has been promising.
+    // push, not replace, so the back gesture returns to this list.
+    <Pressable
+      onPress={() => router.push(`/supply/${item.id}`)}
+      accessibilityRole="button"
+      style={({ pressed }) => pressed && styles.cardPressed}
+    >
+      <ThemedView type="backgroundElement" style={styles.card}>
+        {/* Whole card is a horizontal row: icon circle on the left, content column on the right. */}
+        <View style={styles.cardRow}>
+          {/* Leading icon in a soft-green circle. */}
+          <ThemedView type="backgroundSelected" style={styles.iconCircle}>
+            <MaterialCommunityIcons name={iconFor(item)} size={22} color={theme.primary} />
+          </ThemedView>
 
-        {/* Content column takes the remaining width (flex: 1). */}
-        <View style={styles.content}>
-          {/* A horizontal row: name pushed left, pill pushed right. */}
-          <View style={styles.topRow}>
-            <ThemedText type="smallBold">{item.name}</ThemedText>
-            <ThemedView type="backgroundSelected" style={styles.pill}>
-              <ThemedText type="small" themeColor="textSecondary">
-                {quantityLabel(item)}
-              </ThemedText>
-            </ThemedView>
+          {/* Content column takes the remaining width (flex: 1). */}
+          <View style={styles.content}>
+            {/* A horizontal row: name pushed left, pill pushed right. */}
+            <View style={styles.topRow}>
+              <ThemedText type="smallBold">{item.name}</ThemedText>
+              <ThemedView type="backgroundSelected" style={styles.pill}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {quantityLabel(item)}
+                </ThemedText>
+              </ThemedView>
+            </View>
+
+            {/* Meta line: category, plus the storage location once the item has one. */}
+            <ThemedText type="small" themeColor="textSecondary">
+              {metaLabel(item)}
+            </ThemedText>
           </View>
 
-          {/* Meta line: category, plus the storage location once the item has one. */}
-          <ThemedText type="small" themeColor="textSecondary">
-            {metaLabel(item)}
-          </ThemedText>
+          {/* Muted chevron — the card opens the supply detail screen. */}
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={22}
+            color={theme.textSecondary}
+          />
         </View>
-
-        {/* Muted chevron hinting the whole card is tappable (opens the detail screen later). */}
-        <MaterialCommunityIcons name="chevron-right" size={22} color={theme.textSecondary} />
-      </View>
-    </ThemedView>
+      </ThemedView>
+    </Pressable>
   );
 }
 
@@ -186,6 +198,9 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: Spacing.four,
     padding: Spacing.three,
+  },
+  cardPressed: {
+    opacity: 0.6,
   },
   cardRow: {
     flexDirection: "row",

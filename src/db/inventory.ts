@@ -89,25 +89,64 @@ export type InventoryItemRow = {
   unit: string | null;
 };
 
+// The columns both reads want, kept in one place so the list and the detail screen can't
+// end up asking for different things. LEFT JOIN rather than JOIN so an item with no
+// checklist link still comes back, just without a target.
+const SELECT_ITEMS = `
+  SELECT inventory_items.id,
+         inventory_items.name,
+         inventory_items.category,
+         inventory_items.quantity,
+         inventory_items.storage_location,
+         inventory_items.expires_at,
+         checklist_items.template_id,
+         checklist_items.target_qty,
+         checklist_items.unit
+    FROM inventory_items
+    LEFT JOIN checklist_items
+           ON checklist_items.id = inventory_items.checklist_item_id
+`;
+
 /**
- * Every supply the user has, with the target it is stocking towards. LEFT JOIN rather
- * than JOIN so an item with no checklist link still comes back, just without a target.
+ * Every supply the user has, with the target it is stocking towards.
  * Ordered by id, which is the order onboarding wrote them in.
  */
 export async function getInventory(db: SQLiteDatabase) {
-  return db.getAllAsync<InventoryItemRow>(
-    `SELECT inventory_items.id,
-            inventory_items.name,
-            inventory_items.category,
-            inventory_items.quantity,
-            inventory_items.storage_location,
-            inventory_items.expires_at,
-            checklist_items.template_id,
-            checklist_items.target_qty,
-            checklist_items.unit
-       FROM inventory_items
-       LEFT JOIN checklist_items
-              ON checklist_items.id = inventory_items.checklist_item_id
-      ORDER BY inventory_items.id`
+  return db.getAllAsync<InventoryItemRow>(`${SELECT_ITEMS} ORDER BY inventory_items.id`);
+}
+
+/**
+ * One supply, for the detail screen. Comes back null when the id doesn't exist.
+ */
+export async function getInventoryItem(db: SQLiteDatabase, id: number) {
+  return db.getFirstAsync<InventoryItemRow>(
+    `${SELECT_ITEMS} WHERE inventory_items.id = $id`,
+    { $id: id }
+  );
+}
+
+/**
+ * Saves a new count for one supply. The minus button already stops at zero; the floor is
+ * repeated here so nothing else can write a negative quantity later.
+ */
+export async function setInventoryQuantity(
+  db: SQLiteDatabase,
+  id: number,
+  quantity: number
+) {
+  let safeQuantity = quantity;
+  if (safeQuantity < 0) {
+    safeQuantity = 0;
+  }
+
+  await db.runAsync(
+    `UPDATE inventory_items
+        SET quantity = $quantity, updated_at = $updated_at
+      WHERE id = $id`,
+    {
+      $quantity: safeQuantity,
+      $updated_at: new Date().toISOString(),
+      $id: id,
+    }
   );
 }
