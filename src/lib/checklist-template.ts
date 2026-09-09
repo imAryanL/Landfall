@@ -21,7 +21,14 @@ type TemplateItem = {
 };
 
 // Categories match the onboarding supplies screen word for word, so the two screens
-// don't quietly disagree about where something belongs.
+// don't quietly disagree about where something belongs. The add-item screen offers these
+// plus 'Other', so a custom item always lands in a section the checklist already draws.
+export const CHECKLIST_CATEGORIES = [
+  'Water & food',
+  'Power & light',
+  'Medical & documents',
+] as const;
+
 const TEMPLATE: TemplateItem[] = [
   {
     templateId: 'water',

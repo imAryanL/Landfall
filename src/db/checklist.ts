@@ -87,9 +87,9 @@ export type ChecklistItemRow = {
   on_hand: number | null;
 };
 
-// Every item, in the order the template laid them out. Ordering here rather than in the
-// screen means the list can't shuffle between launches. LEFT JOIN so an item with no
-// linked supply still comes back, just without a count.
+// Template items first, in their laid-out order; then anything the user added, oldest
+// first. Ordering here rather than in the screen means the list can't shuffle between
+// launches. LEFT JOIN so an item with no linked supply still comes back, just no count.
 export async function getChecklist(db: SQLiteDatabase) {
   return db.getAllAsync<ChecklistItemRow>(
     `SELECT checklist_items.id,
@@ -106,7 +106,7 @@ export async function getChecklist(db: SQLiteDatabase) {
        FROM checklist_items
        LEFT JOIN inventory_items
               ON inventory_items.checklist_item_id = checklist_items.id
-      ORDER BY checklist_items.sort_order`
+      ORDER BY checklist_items.is_custom, checklist_items.sort_order, checklist_items.id`
   );
 }
 
@@ -149,6 +149,25 @@ export async function getChecklistIdsByTemplate(db: SQLiteDatabase) {
   }
 
   return byTemplate;
+}
+
+/**
+ * Adds an item the user typed in. Only name and category are set — everything else takes
+ * its column default (no template, no target, no rationale, unchecked). getChecklist
+ * sorts custom items after the template ones, so it lands at the end of its category.
+ */
+export async function addCustomChecklistItem(
+  db: SQLiteDatabase,
+  name: string,
+  category: string
+) {
+  const now = new Date().toISOString();
+
+  await db.runAsync(
+    `INSERT INTO checklist_items (name, category, is_custom, created_at, updated_at)
+     VALUES ($name, $category, 1, $created_at, $updated_at)`,
+    { $name: name, $category: category, $created_at: now, $updated_at: now }
+  );
 }
 
 // Which checklist items ask for a number. Owning water doesn't finish 25 gallons.

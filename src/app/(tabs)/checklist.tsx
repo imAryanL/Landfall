@@ -112,9 +112,10 @@ function ChecklistRow({
           )}
         </View>
 
-        {isCount ? (
-          <ProgressBar percent={fillPercent(onHand, item.target_qty)} />
-        ) : (
+        {isCount && <ProgressBar percent={fillPercent(onHand, item.target_qty)} />}
+
+        {/* Custom items have no rationale, so there's nothing to draw under the name. */}
+        {!isCount && item.rationale && (
           <ThemedText type="small" themeColor="textSecondary">
             {item.rationale}
           </ThemedText>
@@ -254,6 +255,21 @@ export default function ChecklistScreen() {
           </View>
 
           {sections}
+
+          <Pressable
+            onPress={() => router.push("/add-item")}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.addRow,
+              { borderColor: theme.border },
+              pressed && styles.rowPressed,
+            ]}
+          >
+            <MaterialCommunityIcons name="plus" size={20} color={theme.textSecondary} />
+            <ThemedText type="small" themeColor="textSecondary">
+              Add item
+            </ThemedText>
+          </Pressable>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -340,5 +356,14 @@ const styles = StyleSheet.create({
   barFill: {
     height: "100%",
     borderRadius: 8,
+  },
+  addRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 2,
+    borderRadius: 16,
+    paddingVertical: 14,
   },
 });
