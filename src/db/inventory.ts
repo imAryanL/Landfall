@@ -7,8 +7,8 @@ import { SUPPLY_SECTIONS } from '@/app/onboarding/supplies';
 import type { OnboardingDraft } from '@/components/onboarding/onboarding-draft';
 import { getChecklistIdsByTemplate, getTargetTemplateIds } from '@/db/checklist';
 
-// No id — SQLite assigns it. quantity is written here rather than left to the column
-// default, because items with a target have to start at 0.
+// No id — SQLite assigns it. quantity is always written, never left to the column
+// default: a target item starts at 0, and so does anything the user didn't tap.
 const INSERT_ITEM = `
   INSERT INTO inventory_items (
     name, category, quantity, checklist_item_id, created_at, updated_at
@@ -23,20 +23,18 @@ function draftToRows(draft: OnboardingDraft) {
   const now = new Date().toISOString();
   const rows = [];
 
-  // Looping the source list rather than draft.owned means every row is guaranteed a real
-  // label and category, and they come out in screen order instead of tap order.
+  // Every supply gets a row, tapped or not — the merged checklist opens a detail screen
+  // for all of them, so all of them need somewhere to open. owned decides the count.
   for (const section of SUPPLY_SECTIONS) {
     for (const item of section.items) {
-      if (draft.owned.includes(item.id)) {
-        rows.push({
-          // Kept so the row can be matched to the checklist item it stocks.
-          templateId: item.id,
-          name: item.label,
-          category: section.title,
-          created_at: now,
-          updated_at: now,
-        });
-      }
+      rows.push({
+        templateId: item.id,
+        name: item.label,
+        category: section.title,
+        owned: draft.owned.includes(item.id),
+        created_at: now,
+        updated_at: now,
+      });
     }
   }
 
@@ -54,14 +52,13 @@ export async function saveInventory(db: SQLiteDatabase, draft: OnboardingDraft) 
 
   const targetIds = await getTargetTemplateIds(db);
 
-  // Ten items at most, so a plain loop beats building one statement with a changing
-  // number of value rows.
+  // Ten items, so a plain loop beats building one statement with a changing number of rows.
   for (const row of rows) {
-    // Tapping 'Bottled water' says the user owns some, not that they have 25 gallons, so
-    // anything with a target starts empty. A can opener at 1 is already complete.
-    let quantity = 1;
-    if (targetIds.includes(row.templateId)) {
-      quantity = 0;
+    // A target item starts at 0 regardless — owning bottled water isn't having 25 gallons.
+    // A binary item is complete at 1, but only if they actually tapped it.
+    let quantity = 0;
+    if (!targetIds.includes(row.templateId) && row.owned) {
+      quantity = 1;
     }
 
     await db.runAsync(INSERT_ITEM, {
@@ -126,8 +123,9 @@ export async function getInventoryItem(db: SQLiteDatabase, id: number) {
 }
 
 /**
- * Saves a new count for one supply. The minus button already stops at zero; the floor is
- * repeated here so nothing else can write a negative quantity later.
+ * Saves a new count for one supply, then keeps the checklist row it stocks in step. The
+ * minus button already stops at zero; the floor is repeated here so nothing else can
+ * write a negative quantity later.
  */
 export async function setInventoryQuantity(
   db: SQLiteDatabase,
@@ -139,13 +137,32 @@ export async function setInventoryQuantity(
     safeQuantity = 0;
   }
 
+  const now = new Date().toISOString();
+
   await db.runAsync(
     `UPDATE inventory_items
         SET quantity = $quantity, updated_at = $updated_at
       WHERE id = $id`,
     {
       $quantity: safeQuantity,
-      $updated_at: new Date().toISOString(),
+      $updated_at: now,
+      $id: id,
+    }
+  );
+
+  // The linked count item ticks itself once fully stocked and unticks below target.
+  // Binary items (target_qty NULL) are left to the row tap. COALESCE holds the first
+  // done_at rather than bumping it each time a stocked item goes higher.
+  await db.runAsync(
+    `UPDATE checklist_items
+        SET done = CASE WHEN $quantity >= target_qty THEN 1 ELSE 0 END,
+            done_at = CASE WHEN $quantity >= target_qty THEN COALESCE(done_at, $now) ELSE NULL END,
+            updated_at = $now
+      WHERE target_qty IS NOT NULL
+        AND id = (SELECT checklist_item_id FROM inventory_items WHERE id = $id)`,
+    {
+      $quantity: safeQuantity,
+      $now: now,
       $id: id,
     }
   );

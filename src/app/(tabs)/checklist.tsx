@@ -1,8 +1,10 @@
 // The prep checklist, read from the database. The rows are written once during
 // onboarding by the template engine, which is where the items and targets are decided.
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -16,41 +18,49 @@ import {
 } from "@/db/checklist";
 import { useTheme } from "@/hooks/use-theme";
 
-// A small round tap target. Empty circle when unchecked, filled green with a ✓ when checked.
+// Empty green circle when unchecked, filled with a ✓ when checked.
 function Checkbox({ checked }: { checked: boolean }) {
-  // Get the theme colors object so we can use theme.primary (our green) below.
   const theme = useTheme();
 
   return (
-    // This View is the circle itself. Its style is an ARRAY of style objects, combined in order:
     <View
       style={[
-        styles.checkbox, // 1. base look: size, roundness, border thickness (defined below in `styles`)
-        { borderColor: theme.primary }, // 2. always give it a green border
-        checked && { backgroundColor: theme.primary }, // 3. ONLY if checked, also fill it green
+        styles.checkbox,
+        { borderColor: theme.primary },
+        checked && { backgroundColor: theme.primary },
       ]}
     >
-      {/* Only show the ✓ text if checked is true. Same {condition && <Thing/>} trick as web React. */}
       {checked && <ThemedText style={styles.checkmark}>✓</ThemedText>}
     </View>
   );
 }
 
-// '42 gallons', or '5' when the item has no unit. Binary things like a can opener have
-// no target at all, so they get no pill rather than a made-up '1'.
-function formatTarget(item: ChecklistItemRow) {
-  if (item.target_qty === null) {
-    return null;
-  }
-
-  if (item.unit === null) {
-    return String(item.target_qty);
-  }
-
-  return item.target_qty + " " + item.unit;
+// '7 / 25'. The unit ('gallons') lives on the detail screen, where there's room for it.
+function countLabel(onHand: number, target: number | null) {
+  return `${onHand} / ${target}`;
 }
 
-// One full row: checkbox on the left, name + subtitle in the middle, quantity pill on the right.
+// Capped at 100 so an overstocked item doesn't run past the end of the track.
+function fillPercent(onHand: number, target: number | null) {
+  if (target === null || target === 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.round((onHand / target) * 100));
+}
+
+// The thin fill bar under a count item's name — same treatment as Home's breakdown bars.
+function ProgressBar({ percent }: { percent: number }) {
+  return (
+    <ThemedView type="backgroundSelected" style={styles.barTrack}>
+      <ThemedView type="primary" style={[styles.barFill, { width: `${percent}%` }]} />
+    </ThemedView>
+  );
+}
+
+// One row. An item with a target (water, food, flashlights) shows a count and a fill bar,
+// and the whole row opens the supply detail screen — that's where the number gets changed.
+// Everything else is a plain tick with its reason underneath.
 function ChecklistRow({
   item,
   onToggle,
@@ -58,43 +68,66 @@ function ChecklistRow({
   item: ChecklistItemRow;
   onToggle: () => void;
 }) {
-  const target = formatTarget(item);
+  const theme = useTheme();
+
+  const isCount = item.target_qty !== null;
+  const onHand = item.on_hand ?? 0;
+
+  function handlePress() {
+    if (isCount && item.inventory_id !== null) {
+      router.push(`/supply/${item.inventory_id}`);
+    } else {
+      onToggle();
+    }
+  }
+
+  // A count row is a button into the detail screen; a binary row is the checkbox itself.
+  const a11yProps = isCount
+    ? { accessibilityRole: "button" as const }
+    : {
+        accessibilityRole: "checkbox" as const,
+        accessibilityState: { checked: item.done === 1 },
+      };
+
   return (
-    // The whole row is the tap target, not just the little circle — a 24pt circle is well
-    // under Apple's 44pt minimum, and nobody aims for the checkbox anyway.
     <Pressable
-      onPress={onToggle}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: item.done === 1 }}
+      onPress={handlePress}
+      {...a11yProps}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      {/* 1. The checkbox we already built, reused here. SQLite has no boolean, so done
-             arrives as 0 or 1. */}
       <Checkbox checked={item.done === 1} />
 
-      {/* 2. Name and target on one line, reason underneath on its own full-width line.
-             The pill used to sit beside the whole text block, which squeezed the reason
-             into two lines on any item with a long one. */}
       <View style={styles.rowText}>
         <View style={styles.nameRow}>
           <ThemedText type="small" style={styles.nameText}>
             {item.name}
           </ThemedText>
 
-          {/* Only items with a number get a pill. */}
-          {target !== null && (
+          {isCount && (
             <ThemedView type="backgroundSelected" style={styles.pill}>
               <ThemedText type="small" themeColor="textSecondary">
-                {target}
+                {countLabel(onHand, item.target_qty)}
               </ThemedText>
             </ThemedView>
           )}
         </View>
 
-        <ThemedText type="small" themeColor="textSecondary">
-          {item.rationale}
-        </ThemedText>
+        {isCount ? (
+          <ProgressBar percent={fillPercent(onHand, item.target_qty)} />
+        ) : (
+          <ThemedText type="small" themeColor="textSecondary">
+            {item.rationale}
+          </ThemedText>
+        )}
       </View>
+
+      {isCount && (
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={20}
+          color={theme.textSecondary}
+        />
+      )}
     </Pressable>
   );
 }
@@ -158,13 +191,17 @@ export default function ChecklistScreen() {
   // Null until the read comes back, so an empty list never flashes before the real one.
   const [checklist, setChecklist] = useState<ChecklistItemRow[] | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setChecklist(await getChecklist(db));
-    }
+  // useFocusEffect, not useEffect: the tab stays mounted, so a plain mount effect would
+  // never pick up a count changed over on the supply detail screen and back.
+  useFocusEffect(
+    useCallback(() => {
+      async function load() {
+        setChecklist(await getChecklist(db));
+      }
 
-    load();
-  }, [db]);
+      load();
+    }, [db]),
+  );
 
   // Write first, then read the whole list back. Re-reading costs one query over ten local
   // rows and keeps the screen and the database from ever holding different answers.
@@ -208,11 +245,7 @@ export default function ChecklistScreen() {
   return (
     <ThemedView style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
-        {/* ScrollView lets the list scroll once it's taller than the screen.
-            paddingHorizontal keeps content off the edges; paddingBottom gives
-            breathing room above the tab bar when scrolled to the end. */}
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Screen header: big serif title + a calm, personalized subtitle. */}
           <View style={styles.header}>
             <ThemedText style={styles.headerTitle}>Prep checklist</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -220,7 +253,6 @@ export default function ChecklistScreen() {
             </ThemedText>
           </View>
 
-          {/* Drop in all the headers + rows we built above, in order. */}
           {sections}
         </ScrollView>
       </SafeAreaView>
@@ -298,5 +330,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 4,
+  },
+  barTrack: {
+    height: 8,
+    borderRadius: 8,
+    overflow: "hidden", // clips the fill to the rounded track
+    marginTop: 4,
+  },
+  barFill: {
+    height: "100%",
+    borderRadius: 8,
   },
 });

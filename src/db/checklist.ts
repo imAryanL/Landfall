@@ -71,6 +71,8 @@ export async function getChecklistProgress(db: SQLiteDatabase) {
 }
 
 // One checklist row as the table stores it — snake_case, same reasoning as Household.
+// inventory_id and on_hand come from the supply row this item stocks; both are null for
+// anything with no linked supply (a custom item the user added themselves).
 export type ChecklistItemRow = {
   id: number;
   template_id: string | null;
@@ -81,16 +83,30 @@ export type ChecklistItemRow = {
   unit: string | null;
   done: number;
   sort_order: number;
+  inventory_id: number | null;
+  on_hand: number | null;
 };
 
 // Every item, in the order the template laid them out. Ordering here rather than in the
-// screen means the list can't shuffle between launches.
+// screen means the list can't shuffle between launches. LEFT JOIN so an item with no
+// linked supply still comes back, just without a count.
 export async function getChecklist(db: SQLiteDatabase) {
   return db.getAllAsync<ChecklistItemRow>(
-    `SELECT id, template_id, name, category, rationale,
-            target_qty, unit, done, sort_order
+    `SELECT checklist_items.id,
+            checklist_items.template_id,
+            checklist_items.name,
+            checklist_items.category,
+            checklist_items.rationale,
+            checklist_items.target_qty,
+            checklist_items.unit,
+            checklist_items.done,
+            checklist_items.sort_order,
+            inventory_items.id AS inventory_id,
+            inventory_items.quantity AS on_hand
        FROM checklist_items
-      ORDER BY sort_order`
+       LEFT JOIN inventory_items
+              ON inventory_items.checklist_item_id = checklist_items.id
+      ORDER BY checklist_items.sort_order`
   );
 }
 
