@@ -24,11 +24,6 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="inventory">
-        <NativeTabs.Trigger.Label>Inventory</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="shippingbox.fill" md="inventory" />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="alerts">
         <NativeTabs.Trigger.Label>Alerts</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="exclamationmark.triangle.fill" md="warning" />

@@ -14,13 +14,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Fonts, MaxContentWidth, Spacing } from "@/constants/theme";
-import { iconFor } from "@/app/(tabs)/inventory";
 import {
   getInventoryItem,
   setInventoryQuantity,
   type InventoryItemRow,
 } from "@/db/inventory";
 import { useTheme } from "@/hooks/use-theme";
+import { iconFor } from "@/lib/supply-icons";
 
 // The line under the big number. Only items linked to a checklist row have a target, and
 // a target can exist without a unit — flashlights need 3, measured in nothing.
@@ -101,7 +101,7 @@ export default function SupplyDetailScreen() {
               <View style={styles.itemHeader}>
                 <ThemedView type="backgroundSelected" style={styles.iconCircle}>
                   <MaterialCommunityIcons
-                    name={iconFor(item)}
+                    name={iconFor(item.template_id)}
                     size={30}
                     color={theme.primary}
                   />
