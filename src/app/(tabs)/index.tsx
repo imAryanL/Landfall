@@ -15,18 +15,26 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { getChecklistProgress, type ChecklistProgress } from '@/db/checklist';
 import { getHousehold, type Household } from '@/db/household';
+import { getSupplyCoverage, type SupplyCoverage } from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
 
-// The only four things v1 can measure without inventing a number.
-// Supplies and Documents are still hardcoded — neither has the data behind it yet.
+// Documents is the last hardcoded bar — there's no documents table yet. The other three
+// are read from the database.
 function buildBreakdown(
   progress: ChecklistProgress | null,
   household: Household | null,
+  coverage: SupplyCoverage | null,
   notificationsGranted: boolean
 ) {
   let checklistPercent = 0;
   if (progress !== null && progress.total > 0) {
     checklistPercent = Math.round((progress.done / progress.total) * 100);
+  }
+
+  // Stocked against target across the countable supplies (water, food, flashlights).
+  let suppliesPercent = 0;
+  if (coverage !== null && coverage.target > 0) {
+    suppliesPercent = Math.round((coverage.stocked / coverage.target) * 100);
   }
 
   // Both halves have to be true for an alert to land: a zone to watch, and iOS permission.
@@ -39,7 +47,7 @@ function buildBreakdown(
   }
 
   return [
-    { label: 'Supplies', percent: 68 },
+    { label: 'Supplies', percent: suppliesPercent },
     { label: 'Checklist', percent: checklistPercent },
     { label: 'Documents', percent: 40 },
     { label: 'Alerts', percent: alertsPercent },
@@ -116,6 +124,7 @@ export default function HomeScreen() {
   // Null only ever means 'not read yet' — the gate guarantees a row exists.
   const [household, setHousehold] = useState<Household | null>(null);
   const [progress, setProgress] = useState<ChecklistProgress | null>(null);
+  const [coverage, setCoverage] = useState<SupplyCoverage | null>(null);
 
   // Lives in iOS, not the database, so it gets re-read every time the tab is focused.
   const [notificationsGranted, setNotificationsGranted] = useState(false);
@@ -128,6 +137,7 @@ export default function HomeScreen() {
       async function load() {
         setHousehold(await getHousehold(db));
         setProgress(await getChecklistProgress(db));
+        setCoverage(await getSupplyCoverage(db));
 
         const permission = await Notifications.getPermissionsAsync();
         setNotificationsGranted(permission.granted);
@@ -137,7 +147,7 @@ export default function HomeScreen() {
     }, [db])
   );
 
-  const breakdown = buildBreakdown(progress, household, notificationsGranted);
+  const breakdown = buildBreakdown(progress, household, coverage, notificationsGranted);
 
   const breakdownBars = [];
   for (const item of breakdown) {

@@ -122,6 +122,28 @@ export async function getInventoryItem(db: SQLiteDatabase, id: number) {
   );
 }
 
+export type SupplyCoverage = {
+  stocked: number;
+  target: number;
+};
+
+/**
+ * How stocked the countable supplies are, for Home's Supplies bar. MIN clamps each item
+ * so an overstocked one can't push the total past its target; binary items have no
+ * quantity to measure and are left out.
+ */
+export async function getSupplyCoverage(db: SQLiteDatabase) {
+  const row = await db.getFirstAsync<SupplyCoverage>(
+    `SELECT COALESCE(SUM(MIN(inventory_items.quantity, checklist_items.target_qty)), 0) AS stocked,
+            COALESCE(SUM(checklist_items.target_qty), 0) AS target
+       FROM checklist_items
+       JOIN inventory_items ON inventory_items.checklist_item_id = checklist_items.id
+      WHERE checklist_items.target_qty IS NOT NULL`
+  );
+
+  return row ?? { stocked: 0, target: 0 };
+}
+
 /**
  * Saves a new count for one supply, then keeps the checklist row it stocks in step. The
  * minus button already stops at zero; the floor is repeated here so nothing else can
