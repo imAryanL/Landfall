@@ -1,7 +1,9 @@
-// Alerts tab — active watches and warnings for your county, from the National Weather Service.
-// Not storms only: NWS also issues tornado, flood, heat and winter alerts through the same feed.
-// Mock data for now; the real NWS wiring comes in the functionality pass.
+// Alerts tab — active watches and warnings for your zone, from the National Weather Service.
+// The severity now comes from NWS; everything below it is still mock.
 
+import { useFocusEffect } from "expo-router";
+import { useSQLiteContext } from "expo-sqlite";
+import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -19,21 +21,20 @@ import {
   MaxContentWidth,
   Spacing,
 } from "@/constants/theme";
+import { getHousehold } from "@/db/household";
+import {
+  levelFor,
+  timelineFor,
+  topAlert,
+  type AlertLevel,
+} from "@/lib/alert-rules";
+import { fetchActiveAlerts, type AlertData } from "@/lib/nws";
 
-// Which alert is showing. Temporary switch for building — real NWS data sets this later.
-//   "calm"    = no active alert (the all-clear state)
-//   "watch"   = conditions POSSIBLE (amber — prepare calmly)
-//   "warning" = conditions EXPECTED (red — act now)
-const ALERT_STATE: "calm" | "watch" | "warning" = "calm";
-
-// Whether we're showing cached data because the device has no connection. This is a
-// SEPARATE switch from ALERT_STATE on purpose: connectivity and severity are two
-// independent things — you can be offline on a calm day OR during a warning — so
-// "offline" is a banner layered on top of any state, never a fourth alert state.
-// Temporary switch for building; the real network check sets this later.
+// Kept separate from the severity above: connectivity and severity are independent — you
+// can be offline on a calm day or during a warning — so offline is a banner layered on
+// any state, never a fourth one. Still mock, and it stays mock until there is somewhere
+// to cache alerts; the banner names a time, and we have no honest time to put in it yet.
 const IS_OFFLINE = false;
-
-// When the cached NWS data was last successfully fetched. Mock for now.
 const CACHED_AT = "8:41 AM";
 
 // How far into hurricane season today is, as a percent (Jun 1 = 0, Nov 30 = 100). Mock
@@ -57,28 +58,46 @@ const OFFLINE_FEATURES = [
   { name: "Live alerts", note: "Needs a connection to refresh", isAvailable: false },
 ];
 
-// Two versions of the timeline — a watch and a warning describe different storms,
-// so the wording differs (tropical-storm-force winds "possible" vs hurricane-force
-// winds "expected"). Each row maps to a field the NWS alert actually returns — "now"
-// is the alert being in effect, then `onset` (when conditions may begin), then `ends`
-// (when the alert is over). Still three rows each: NWS publishes no hour-by-hour breakdown.
-const WATCH_TIMELINE = [
-  { time: "Now", detail: "Watch in effect", isNow: true },
-  { time: "Fri 2 PM", detail: "Sustained tropical-storm-force winds begin across the county", isNow: false },
-  { time: "Sat 8 AM", detail: "Watch expires", isNow: false },
-];
-
-const WARNING_TIMELINE = [
-  { time: "Now", detail: "Warning in effect", isNow: true },
-  { time: "Fri 9 PM", detail: "Sustained hurricane-force winds begin across the county", isNow: false },
-  { time: "Sat 10 AM", detail: "Warning expires", isNow: false },
-];
-
 export default function AlertsScreen() {
-  // Which timeline the "What to expect" card shows — a watch and a warning describe
-  // different storms, so the wording differs. The data stays here in the screen; the
-  // card that renders it is presentational.
-  const timeline = ALERT_STATE === "warning" ? WARNING_TIMELINE : WATCH_TIMELINE;
+  const db = useSQLiteContext();
+
+  // calm = nothing active · watch = conditions POSSIBLE (amber) · warning = EXPECTED (red).
+  const [level, setLevel] = useState<AlertLevel>("calm");
+
+  // The alert driving that level, so the card can quote it. Null on a calm day.
+  const [alert, setAlert] = useState<AlertData | null>(null);
+
+  // Re-checks whenever the tab is opened, so a storm that started while the app was
+  // closed still shows up. Same reason Home re-reads its numbers on focus.
+  useFocusEffect(
+    useCallback(() => {
+      async function load() {
+        const household = await getHousehold(db);
+
+        // No zone means onboarding finished on the offline path — nothing to ask about.
+        if (!household?.nws_zone_id) {
+          return;
+        }
+
+        const alerts = await fetchActiveAlerts(household.nws_zone_id);
+
+        // null means NWS was never reached. Leave the last known state alone rather than
+        // quietly downgrading a real warning to calm because the signal dropped.
+        if (alerts === null) {
+          return;
+        }
+
+        setLevel(levelFor(alerts));
+        setAlert(topAlert(alerts));
+      }
+
+      load();
+    }, [db]),
+  );
+
+  // Built from the alert's own times, so the rows can't describe a different storm than
+  // the card above them. Empty on a calm day, when there's nothing to lay out.
+  const timeline = alert === null ? [] : timelineFor(alert);
 
   return (
     <ThemedView style={{ flex: 1 }}>
@@ -92,21 +111,23 @@ export default function AlertsScreen() {
           {IS_OFFLINE && <OfflineBanner cachedAt={CACHED_AT} />}
 
           {/* The calm "all clear" state — the season bar and nudge live inside it. */}
-          {ALERT_STATE === "calm" && (
+          {level === "calm" && (
             <CalmState seasonTodayPercent={SEASON_TODAY_PERCENT} />
           )}
 
           {/* The active alert card — amber for a watch, red for a warning. The colors and
               the wording live inside the component, keyed off severity. */}
-          {ALERT_STATE !== "calm" && <AlertCard severity={ALERT_STATE} />}
+          {level !== "calm" && alert !== null && (
+            <AlertCard severity={level} alert={alert} />
+          )}
 
           {/* "What to expect" — its own white card, kept separate from the amber/red one:
               amber says what IS happening, white says what happens next. See the component. */}
-          {ALERT_STATE !== "calm" && <StormTimeline steps={timeline} />}
+          {level !== "calm" && <StormTimeline steps={timeline} />}
 
           {/* "What you can do now" — comes last so the screen ends on action. Only Landfall
               can answer this, since it knows what's already checked off. See the component. */}
-          {ALERT_STATE !== "calm" && <NextSteps steps={NEXT_STEPS} />}
+          {level !== "calm" && <NextSteps steps={NEXT_STEPS} />}
 
           {/* "Still available offline" — layers onto any severity state below, gated on
               IS_OFFLINE alone. Answers "what can I still use?" See the component. */}

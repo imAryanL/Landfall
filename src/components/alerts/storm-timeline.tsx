@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.five, // gap to the next row; the line runs through it
   },
   time: {
-    width: 62, // fixed width so every time lands on the same right edge
+    width: 78, // fits a real NWS time ('Thu 6:15 AM') on one line, right edges aligned
     textAlign: "right",
     fontSize: 12,
     lineHeight: 20, // matches the description's line height so the two align

@@ -7,13 +7,18 @@ import { StyleSheet, View } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { Fonts, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
+import type { AlertData } from "@/lib/nws";
 
 type AlertCardProps = {
   // "watch" = conditions possible (amber); "warning" = conditions expected (red).
   severity: "watch" | "warning";
+
+  // The alert itself, straight from NWS. Every word of fact on this card comes from
+  // here — the app never writes a forecast of its own.
+  alert: AlertData;
 };
 
-export function AlertCard({ severity }: AlertCardProps) {
+export function AlertCard({ severity, alert }: AlertCardProps) {
   const theme = useTheme();
 
   // Only the colors and label change between a watch and a warning. The light amber fill
@@ -22,7 +27,10 @@ export function AlertCard({ severity }: AlertCardProps) {
   const cardBackground = isWarning ? theme.dangerBackground : theme.warningBackground;
   const badgeFill = isWarning ? theme.dangerFill : theme.warningFill;
   const badgeTextColor = isWarning ? "#FFFFFF" : theme.text;
-  const badgeLabel = isWarning ? "HURRICANE WARNING" : "TROPICAL STORM WATCH";
+
+  // NWS names the event itself ('Hurricane Warning', 'Storm Surge Watch'), so the badge
+  // is never wrong about which kind of alert this is.
+  const badgeLabel = alert.event.toUpperCase();
 
   return (
     <View style={[styles.card, { backgroundColor: cardBackground }]}>
@@ -39,46 +47,28 @@ export function AlertCard({ severity }: AlertCardProps) {
         </ThemedText>
       </View>
 
-      {/* Headline — the one line someone reads if they read nothing else.
-          A watch says conditions are POSSIBLE; a warning says EXPECTED. */}
-      {isWarning ? (
-        <ThemedText style={styles.headline}>
-          Hurricane conditions expected by Friday night
-        </ThemedText>
-      ) : (
-        <ThemedText style={styles.headline}>
-          Tropical storm conditions possible by Friday afternoon
-        </ThemedText>
-      )}
+      {/* NWS's own headline, verbatim. It already says what is happening, where, and
+          until when — rewriting it would mean writing a forecast. */}
+      <ThemedText style={styles.headline}>{alert.headline}</ThemedText>
 
-      {/* The details: fact → what the classification means → what to do.
-          Calm-but-serious for a warning; we mirror the NWS wording exactly. */}
+      {/* What the classification means. Deliberately carries NO storm specifics: this
+          sentence is true of every NWS watch or warning, so it can never contradict the
+          alert above it. The old copy named wind speeds NWS doesn't give us. */}
       {isWarning ? (
         <ThemedText style={styles.body}>
-          Sustained winds of{" "}
-          <ThemedText style={styles.stat}>74+ mph</ThemedText> are
-          expected across Broward County. A warning means these
-          conditions are on the way within{" "}
-          <ThemedText style={styles.stat}>36 hours</ThemedText> —
-          it&apos;s time to finish every task and follow local emergency
-          guidance.
+          A warning means these conditions are expected or already happening —
+          it&apos;s time to finish every task and follow local emergency guidance.
         </ThemedText>
       ) : (
         <ThemedText style={styles.body}>
-          Sustained winds of{" "}
-          <ThemedText style={styles.stat}>39–57 mph</ThemedText> are
-          possible across Broward County. A watch means conditions are
-          possible within{" "}
-          <ThemedText style={styles.stat}>48 hours</ThemedText> —
-          it&apos;s the signal to finish preparing, not a reason to panic.
+          A watch means these conditions are possible — it&apos;s the signal to
+          finish preparing, not a reason to panic.
         </ThemedText>
       )}
 
-      {/* Who issued this and when — builds trust, and matches the calm state's
-          source line. Not textSecondary: muted gray washes out on the card. */}
-      <ThemedText style={styles.issued}>
-        Issued 5:03 AM · National Weather Service, Miami
-      </ThemedText>
+      {/* The office that actually issued it. Not textSecondary: muted gray washes out
+          on the card. */}
+      <ThemedText style={styles.issued}>{alert.senderName}</ThemedText>
     </View>
   );
 }

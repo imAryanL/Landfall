@@ -1,5 +1,5 @@
-// Asks the National Weather Service which county, forecast zone, and office cover a
-// pair of coordinates. Called once during onboarding, right after a ZIP is looked up.
+// Talks to the National Weather Service. Two jobs: work out which zone covers a pair of
+// coordinates (onboarding), and fetch the watches and warnings running in a zone (Alerts).
 
 // NWS requires a User-Agent naming the app and a way to reach whoever runs it.
 const USER_AGENT = "(Landfall, github.com/imAryanL/Landfall)";
@@ -59,6 +59,72 @@ export async function fetchPointData(lat: number, lon: number): Promise<PointDat
     return null;
   } finally {
     // Runs whether we returned or threw, so a fast answer doesn't leave a timer pending.
+    clearTimeout(timer);
+  }
+}
+
+export type AlertData = {
+  id: string;
+  event: string;
+  severity: string;
+  headline: string;
+
+  // When the hazard is expected to begin, and when the alert is over. Both ISO strings.
+  // Most alerts are already underway by the time you read them, so onset is often past.
+  onset: string | null;
+  ends: string | null;
+
+  // Which NWS office issued it, like 'NWS Miami FL'. Shown on the card so the alert
+  // is attributed to the office that actually wrote it.
+  senderName: string;
+};
+
+/**
+ * The watches and warnings running in one forecast zone. An empty array means NWS
+ * answered and nothing is active; null means we never reached it. The screen has to tell
+ * those apart — 'all clear' and 'we don't know' are different things to say before a storm.
+ */
+export async function fetchActiveAlerts(zoneId: string): Promise<AlertData[] | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const response = await fetch(
+      `https://api.weather.gov/alerts/active?zone=${zoneId}`,
+      {
+        headers: { "User-Agent": USER_AGENT },
+        signal: controller.signal,
+      }
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const body = await response.json();
+    const alerts = [];
+
+    for (const feature of body.features) {
+      const alert = feature.properties;
+      alerts.push({
+        id: alert.id,
+        event: alert.event,
+        severity: alert.severity,
+        headline: alert.headline,
+
+        onset: alert.onset ?? null,
+
+        // A handful of alerts carry no 'ends'. 'expires' is always there, so it stands in.
+        ends: alert.ends ?? alert.expires ?? null,
+
+        senderName: alert.senderName,
+      });
+    }
+
+    return alerts;
+  } catch {
+    return null;
+  } finally {
     clearTimeout(timer);
   }
 }
