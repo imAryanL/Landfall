@@ -204,8 +204,8 @@ export default function ChecklistScreen() {
     }, [db]),
   );
 
-  // Write first, then read the whole list back. Re-reading costs one query over ten local
-  // rows and keeps the screen and the database from ever holding different answers.
+  // Write first, then read the whole list back. Re-reading costs one query over a
+  // handful of local rows and keeps the screen and the database from ever disagreeing.
   async function toggleItem(item: ChecklistItemRow) {
     await setChecklistItemDone(db, item.id, item.done !== 1);
     setChecklist(await getChecklist(db));

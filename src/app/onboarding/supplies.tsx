@@ -14,8 +14,8 @@ import { useTheme } from '@/hooks/use-theme';
 
 const CURRENT_STEP = 3;
 
-// All ten are on Florida's official disaster supply checklist. No icons and no subtext,
-// so they fit two per line without scrolling.
+// Every item here is on Florida's official disaster supply checklist. No icons and no
+// subtext, so they fit two per line without scrolling.
 export const SUPPLY_SECTIONS = [
   {
     title: 'Water & food',
@@ -40,6 +40,15 @@ export const SUPPLY_SECTIONS = [
       { id: 'medicines', label: 'Prescription medicines' },
       { id: 'cash', label: 'Cash' },
       { id: 'documents', label: 'Important documents' },
+    ],
+  },
+  {
+    title: 'Home & property',
+    items: [
+      { id: 'shutters', label: 'Storm shutters or plywood' },
+      { id: 'sandbags', label: 'Sandbags' },
+      { id: 'tarp', label: 'Heavy-duty tarp' },
+      { id: 'tie_downs', label: 'Rope or tie-downs' },
     ],
   },
 ];

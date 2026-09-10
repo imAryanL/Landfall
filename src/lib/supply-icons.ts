@@ -17,6 +17,10 @@ const ICONS: Record<string, IconName> = {
   medicines: "pill",
   cash: "cash",
   documents: "file-document-outline",
+  shutters: "window-shutter",
+  sandbags: "sack",
+  tarp: "home-roof",
+  tie_downs: "anchor",
 };
 
 // A custom item the user added has no template_id — it gets a plain box.

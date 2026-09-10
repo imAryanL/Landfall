@@ -52,7 +52,8 @@ export async function saveInventory(db: SQLiteDatabase, draft: OnboardingDraft) 
 
   const targetIds = await getTargetTemplateIds(db);
 
-  // Ten items, so a plain loop beats building one statement with a changing number of rows.
+  // A short, fixed list, so a plain loop beats building one statement with a changing
+  // number of rows.
   for (const row of rows) {
     // A target item starts at 0 regardless — owning bottled water isn't having 25 gallons.
     // A binary item is complete at 1, but only if they actually tapped it.

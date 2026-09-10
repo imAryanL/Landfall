@@ -1,6 +1,6 @@
 // The prep checklist every household starts with.
 //
-// Plain data and plain math, no database and no React. The ten items are the same ten
+// Plain data and plain math, no database and no React. These items are the same ones
 // the onboarding supplies screen asks about, and they share the same ids on purpose —
 // that is what lets 'I already own this' land on the right row with no translation.
 
@@ -27,6 +27,7 @@ export const CHECKLIST_CATEGORIES = [
   'Water & food',
   'Power & light',
   'Medical & documents',
+  'Home & property',
 ] as const;
 
 const TEMPLATE: TemplateItem[] = [
@@ -107,6 +108,38 @@ const TEMPLATE: TemplateItem[] = [
     name: 'Important documents',
     category: 'Medical & documents',
     rationale: 'Insurance, IDs, prescriptions',
+    quantityFrom: null,
+    unit: null,
+  },
+  {
+    templateId: 'shutters',
+    name: 'Storm shutters or plywood',
+    category: 'Home & property',
+    rationale: 'Protects windows from wind-driven debris',
+    quantityFrom: null,
+    unit: null,
+  },
+  {
+    templateId: 'sandbags',
+    name: 'Sandbags',
+    category: 'Home & property',
+    rationale: 'Blocks water at doors and thresholds',
+    quantityFrom: null,
+    unit: null,
+  },
+  {
+    templateId: 'tarp',
+    name: 'Heavy-duty tarp',
+    category: 'Home & property',
+    rationale: 'Covers roof damage until repairs',
+    quantityFrom: null,
+    unit: null,
+  },
+  {
+    templateId: 'tie_downs',
+    name: 'Rope or tie-downs',
+    category: 'Home & property',
+    rationale: 'Secures grills, furniture, and bins',
     quantityFrom: null,
     unit: null,
   },
