@@ -1,15 +1,11 @@
-// Sets up Landfall's local database and keeps its shape up to date.
-//
-// This is the app's source of truth — everything the user owns lives in a SQLite file on
-// the phone, and the app works with no internet at all. The database file carries its own
-// version number, so future changes upgrade an old file in place instead of wiping it.
+// Sets up the local database and upgrades old files in place instead of wiping them.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'landfall.db';
 
 // Bump this by one every time a step is added to the ladder below.
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 
 /**
  * Brings a database file up to the current version. Runs once when the app starts.
@@ -105,13 +101,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
 
   // --- Step 3 ------------------------------------------------------------------------
   if (currentVersion === 2) {
-    // The city and state the weather service reports back, like 'Plantation, FL'. It was
-    // already being fetched during onboarding and then thrown away — the row kept only
-    // the county and zone codes, which are no use to show anyone.
-    //
-    // A new rung rather than an edit to step 1: step 1 has already run on real phones,
-    // so changing it now would do nothing to them. This is the whole reason the ladder
-    // exists.
+    // 'Plantation, FL'. A new step, not an edit to step 1 — step 1 already ran on phones.
     await db.execAsync(`
       ALTER TABLE household ADD COLUMN place TEXT;
     `);
@@ -160,10 +150,29 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     currentVersion = 4;
   }
 
+  // --- Step 5 ------------------------------------------------------------------------
+  if (currentVersion === 4) {
+    // One row, not one per alert — an all-clear is an empty list and still needs a time.
+    await db.execAsync(`
+      CREATE TABLE alerts_cache (
+        id INTEGER PRIMARY KEY NOT NULL,
+
+        -- The list NWS returned, as JSON. '[]' means it answered and nothing is active.
+        alerts TEXT NOT NULL,
+        checked_at TEXT NOT NULL,
+
+        -- So a saved answer for an old zone never shows under a new one.
+        zone_id TEXT NOT NULL
+      );
+    `);
+
+    currentVersion = 5;
+  }
+
   // --- Future steps go here ----------------------------------------------------------
-  //   if (currentVersion === 4) {
+  //   if (currentVersion === 5) {
   //     await db.execAsync(`CREATE TABLE documents (...);`);
-  //     currentVersion = 5;
+  //     currentVersion = 6;
   //   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

@@ -77,8 +77,8 @@ export type TimelineStep = {
   isNow: boolean;
 };
 
-// 'Fri 9 PM'. Short on purpose — the column it sits in is 62px wide.
-function formatTime(iso: string) {
+// 'Fri 9:15 PM'.
+export function formatTime(iso: string) {
   const date = new Date(iso);
 
   const day = date.toLocaleDateString("en-US", { weekday: "short" });

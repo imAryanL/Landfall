@@ -1,5 +1,4 @@
-// The calm "all clear" state — what people see on most days. Frameless on purpose:
-// cards are reserved for real watch/warning states, so a card appearing means something.
+// The calm "all clear" state. Frameless — cards are saved for real watches and warnings.
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { StyleSheet, View } from "react-native";
@@ -10,16 +9,15 @@ import { Fonts, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 type CalmStateProps = {
-  // How far into hurricane season today is (0–100), forwarded to the season bar below.
   seasonTodayPercent: number;
+  place: string | null;
 };
 
-export function CalmState({ seasonTodayPercent }: CalmStateProps) {
+export function CalmState({ seasonTodayPercent, place }: CalmStateProps) {
   const theme = useTheme();
 
   return (
     <View style={styles.calmState}>
-      {/* Green check inside soft rings — a calm "radar is quiet" signal. */}
       <View style={[styles.ring1, { borderColor: theme.primarySoft }]}>
         <View style={[styles.ring2, { borderColor: theme.primarySoft }]}>
           <View style={[styles.ring3, { borderColor: theme.primarySoft }]}>
@@ -39,16 +37,13 @@ export function CalmState({ seasonTodayPercent }: CalmStateProps) {
         </View>
       </View>
 
-      {/* The headline people are hoping to see. */}
       <ThemedText style={styles.calmTitle}>No active alerts</ThemedText>
 
-      {/* Plain-language explanation, crediting NWS as the official source. */}
       <ThemedText themeColor="textSecondary" style={styles.calmBody}>
         The National Weather Service hasn&apos;t issued any watches or warnings
-        for Broward County.
+        for {place ?? "your area"}.
       </ThemedText>
 
-      {/* Says out loud that the app keeps working without signal. */}
       <ThemedText
         type="small"
         themeColor="textSecondary"
@@ -58,12 +53,9 @@ export function CalmState({ seasonTodayPercent }: CalmStateProps) {
         even if you lose signal.
       </ThemedText>
 
-      {/* Where we are in hurricane season — a pure calendar, no forecast. */}
       <SeasonBar todayPercent={seasonTodayPercent} />
 
-      {/* Calm-day nudge — gives the empty state a small job by pointing back into prep.
-          Soft green tint, not a card: it's an FYI, not an alert. Icon + centered text
-          echo the rings-over-text rhythm of the hero above. */}
+      {/* Tint, not a card — it's an FYI, not an alert. */}
       <View style={[styles.nudge, { backgroundColor: theme.backgroundSelected }]}>
         <MaterialCommunityIcons
           name="lightbulb-outline"
@@ -80,31 +72,30 @@ export function CalmState({ seasonTodayPercent }: CalmStateProps) {
 
 const styles = StyleSheet.create({
   calmState: {
-    paddingTop: Spacing.three, // sits the rings closer to the header
-    paddingBottom: Spacing.two, // small, so the nudge sits near the disclaimer below
-    // no horizontal padding: lets the nudge span the same width as the season bar below
-    alignItems: "center", // centers everything horizontally — calm, not urgent
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.two,
+    alignItems: "center",
     gap: Spacing.three,
   },
   calmTitle: {
     fontFamily: Fonts.sans,
     fontSize: 22,
-    lineHeight: 28, // always >= fontSize or the text clips
+    lineHeight: 28,
     fontWeight: "600",
   },
   calmBody: {
-    textAlign: "center", // matches the centered rings and heading above it
+    textAlign: "center",
     lineHeight: 22,
-    maxWidth: 300, // keeps the line short so it wraps into a tidy block, not edge-to-edge
+    maxWidth: 300,
   },
   calmFootnote: {
     textAlign: "center",
     lineHeight: 18,
-    maxWidth: 280, // slightly narrower than the body above, so it reads as secondary
+    maxWidth: 280,
   },
   nudge: {
-    alignSelf: "stretch", // full width inside the center-aligned column
-    alignItems: "center", // icon over centered text, matching the hero above
+    alignSelf: "stretch",
+    alignItems: "center",
     gap: Spacing.two,
     borderRadius: 12,
     padding: Spacing.three,
@@ -112,16 +103,16 @@ const styles = StyleSheet.create({
   nudgeText: {
     fontSize: 14,
     lineHeight: 22,
-    textAlign: "center", // matches the centered copy up the screen
+    textAlign: "center",
   },
-  // Three rings, outermost to innermost. Each borderRadius is exactly half the width.
+  // Outermost to innermost; each borderRadius is half the width.
   ring1: {
     width: 152,
     height: 152,
     borderRadius: 76,
     borderWidth: 1,
-    alignItems: "center", // centers the next ring horizontally
-    justifyContent: "center", // and vertically
+    alignItems: "center",
+    justifyContent: "center",
   },
   ring2: {
     width: 120,
