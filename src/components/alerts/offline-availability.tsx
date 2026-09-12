@@ -1,8 +1,9 @@
 // "Still available offline" — shown when there's no connection, answering "what can I
-// still use?" Plus a retry button that does nothing yet (a fake re-check would be a lie).
+// still use?" Plus a button that asks NWS again.
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
 import { SectionHeading } from "@/components/alerts/section-heading";
 import { ThemedText } from "@/components/themed-text";
@@ -19,10 +20,28 @@ type OfflineFeature = {
 
 type OfflineAvailabilityProps = {
   features: OfflineFeature[];
+  onRetry: () => Promise<void>;
 };
 
-export function OfflineAvailability({ features }: OfflineAvailabilityProps) {
+export function OfflineAvailability({ features, onRetry }: OfflineAvailabilityProps) {
   const theme = useTheme();
+
+  const [isChecking, setIsChecking] = useState(false);
+  // A check that reaches NWS hides this whole card, so still being here means it failed.
+  const [hasFailed, setHasFailed] = useState(false);
+
+  async function handleRetry() {
+    setIsChecking(true);
+    setHasFailed(false);
+
+    // Half a second minimum. Offline, the fetch fails almost instantly and the spinner
+    // would flash too fast to see — which is the dead-button feeling all over again.
+    const minimumSpin = new Promise((resolve) => setTimeout(resolve, 600));
+    await Promise.all([onRetry(), minimumSpin]);
+
+    setIsChecking(false);
+    setHasFailed(true);
+  }
 
   // Build one row per feature with a plain loop, same divider pattern as the next-steps card.
   const featureRows = [];
@@ -53,6 +72,16 @@ export function OfflineAvailability({ features }: OfflineAvailabilityProps) {
     );
   }
 
+  // Spinner and a different label while a check is running.
+  let buttonIcon = (
+    <MaterialCommunityIcons name="refresh" size={18} color={theme.primaryDeep} />
+  );
+  let buttonLabel = "Check for a connection";
+  if (isChecking) {
+    buttonIcon = <ActivityIndicator size="small" color={theme.primaryDeep} />;
+    buttonLabel = "Checking…";
+  }
+
   return (
     <View style={styles.section}>
       <SectionHeading>Still available offline</SectionHeading>
@@ -63,7 +92,8 @@ export function OfflineAvailability({ features }: OfflineAvailabilityProps) {
       {/* Outlined, not filled: a solid green block would compete with the red warning
           card, and this is just housekeeping. */}
       <Pressable
-        onPress={() => {}}
+        onPress={handleRetry}
+        disabled={isChecking}
         style={({ pressed }) => [
           styles.retryButton,
           { borderColor: theme.primarySoft },
@@ -71,15 +101,17 @@ export function OfflineAvailability({ features }: OfflineAvailabilityProps) {
           pressed && styles.retryButtonPressed,
         ]}
       >
-        <MaterialCommunityIcons
-          name="refresh"
-          size={18}
-          color={theme.primaryDeep}
-        />
+        {buttonIcon}
         <ThemedText themeColor="primaryDeep" style={styles.retryButtonText}>
-          Check for a connection
+          {buttonLabel}
         </ThemedText>
       </Pressable>
+
+      {hasFailed && !isChecking && (
+        <ThemedText themeColor="textSecondary" style={styles.retryNote}>
+          Still no connection. Try again once you have signal.
+        </ThemedText>
+      )}
     </View>
   );
 }
@@ -130,5 +162,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "600", // slightly heavier than body text so it reads as an action
+  },
+  retryNote: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
   },
 });

@@ -49,8 +49,8 @@ export function CalmState({ seasonTodayPercent, place }: CalmStateProps) {
         themeColor="textSecondary"
         style={styles.calmFootnote}
       >
-        Landfall checks every hour and saves the newest update, so it&apos;s here
-        even if you lose signal.
+        Landfall saves the newest update, so it&apos;s still here if you lose
+        signal.
       </ThemedText>
 
       <SeasonBar todayPercent={seasonTodayPercent} />

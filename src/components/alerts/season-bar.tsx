@@ -1,6 +1,6 @@
 // The hurricane-season progress bar for the calm Alerts screen. A pure calendar: the
 // green fill runs from Jun 1 to today, and a soft-green band marks the historically busy
-// stretch (mid-August through October). No forecast, no live weather — just dates.
+// stretch (mid-August through mid-October). No forecast, no live weather — just dates.
 // Understated (no card) so the calm screen stays lighter than the warning screen.
 
 import { StyleSheet, View } from "react-native";
@@ -10,12 +10,14 @@ import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
-// The historically busy stretch, as percents of the Jun 1 – Nov 30 season (183 days):
-// mid-August (~day 76) through end of October (~day 153). Fixed calendar facts — never
-// driven by live weather, which is what keeps this bar honest.
-const PEAK_START_PERCENT = 42;
-const PEAK_END_PERCENT = 84;
-const PEAK_MID_PERCENT = (PEAK_START_PERCENT + PEAK_END_PERCENT) / 2;
+// The historically busy stretch, as percents of the Jun 1 – Nov 30 season (183 days).
+// Fixed calendar facts — never driven by live weather, which is what keeps this bar honest.
+const PEAK_START_PERCENT = 42; // ~Aug 16
+const PEAK_END_PERCENT = 75; // ~Oct 15
+
+// Sept 10, NOAA's climatological peak. Deliberately not the band's midpoint — the curve
+// peaks early in the stretch and tails off, so centering the word would point at late Sep.
+const PEAK_LABEL_PERCENT = 55;
 
 // The six months of the season, drawn evenly across the bar as a rough guide.
 const MONTHS = ["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"];
@@ -47,7 +49,7 @@ export function SeasonBar({ todayPercent }: SeasonBarProps) {
       <View style={styles.peakRow}>
         <ThemedText
           themeColor="primaryDeep"
-          style={[styles.peakLabel, { left: `${PEAK_MID_PERCENT}%` }]}
+          style={[styles.peakLabel, { left: `${PEAK_LABEL_PERCENT}%` }]}
         >
           PEAK
         </ThemedText>

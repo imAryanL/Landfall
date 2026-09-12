@@ -13,10 +13,13 @@ import { ReadinessRing } from '@/components/readiness-ring';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
+import { getCachedAlerts, type CachedAlerts } from '@/db/alerts';
 import { getChecklistProgress, type ChecklistProgress } from '@/db/checklist';
 import { getHousehold, type Household } from '@/db/household';
 import { getSupplyCoverage, type SupplyCoverage } from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
+import { levelFor, topAlert, type AlertLevel } from '@/lib/alert-rules';
+import { type AlertData } from '@/lib/nws';
 
 // Documents is the last hardcoded bar — there's no documents table yet. The other three
 // are read from the database.
@@ -68,13 +71,27 @@ const NEEDS_ATTENTION = [
   },
 ];
 
-// Mock until the alert pipeline lands. Home mirrors one line; Alerts owns the full card.
-const STORM_STATUS = {
-  severity: 'watch' as 'calm' | 'watch' | 'warning',
-  label: 'Tropical Storm Watch in effect',
-};
 
 // City and state, never the county — a county name is right for hundreds of ZIPs that aren't yours.
+// The line under the greeting. Same saved NWS answer as the storm row, so the top and
+// bottom of the screen can't describe different weather. Event names come from NWS.
+function buildGreetingSummary(level: AlertLevel | null, alert: AlertData | null) {
+  if (level === 'warning' && alert !== null) {
+    return `There's a ${alert.event} out for your area. Follow official guidance and finish what you can.`;
+  }
+
+  if (level === 'watch' && alert !== null) {
+    return `There's a ${alert.event} out for your area. Still time to prepare calmly.`;
+  }
+
+  if (level === 'calm') {
+    return 'No watches or warnings today. A quiet stretch is the best time to get ahead.';
+  }
+
+  // Nothing saved yet, so it claims nothing about the weather.
+  return 'Everything you add here works offline, storm or no storm.';
+}
+
 function buildStormDetail(place: string | null) {
   if (place === null || place === '') {
     return 'National Weather Service';
@@ -126,6 +143,10 @@ export default function HomeScreen() {
   const [progress, setProgress] = useState<ChecklistProgress | null>(null);
   const [coverage, setCoverage] = useState<SupplyCoverage | null>(null);
 
+  // The answer the Alerts tab saved. Home reads it and never fetches — one screen owns
+  // talking to NWS, so the two can't end up showing different storms.
+  const [alerts, setAlerts] = useState<CachedAlerts | null>(null);
+
   // Lives in iOS, not the database, so it gets re-read every time the tab is focused.
   const [notificationsGranted, setNotificationsGranted] = useState(false);
 
@@ -135,7 +156,14 @@ export default function HomeScreen() {
     // Memoised, or the effect re-runs on every render.
     useCallback(() => {
       async function load() {
-        setHousehold(await getHousehold(db));
+        const householdRow = await getHousehold(db);
+        setHousehold(householdRow);
+
+        // Needs the zone, so it reads off the row rather than waiting for state to settle.
+        if (householdRow?.nws_zone_id) {
+          setAlerts(await getCachedAlerts(db, householdRow.nws_zone_id));
+        }
+
         setProgress(await getChecklistProgress(db));
         setCoverage(await getSupplyCoverage(db));
 
@@ -156,12 +184,22 @@ export default function HomeScreen() {
     );
   }
 
+  // The same two helpers the Alerts tab uses, so the screens can't disagree.
+  const stormLevel = alerts === null ? null : levelFor(alerts.alerts);
+  const stormAlert = alerts === null ? null : topAlert(alerts.alerts);
+
+  // NWS's own event name — never our own words for what the storm is.
+  let stormLabel = 'No active alerts';
+  if (stormAlert !== null) {
+    stormLabel = `${stormAlert.event} in effect`;
+  }
+
   // Typed as string so the reassignments below aren't locked to the green it starts as.
   let stormDotColor: string = theme.primary;
-  if (STORM_STATUS.severity === 'watch') {
+  if (stormLevel === 'watch') {
     stormDotColor = theme.warningFill;
   }
-  if (STORM_STATUS.severity === 'warning') {
+  if (stormLevel === 'warning') {
     stormDotColor = theme.dangerFill;
   }
 
@@ -227,11 +265,10 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Fact, then classification, then reassurance — reassurance last, because
-                that's the part people hold onto. Mock for now. */}
+            {/* Fact, then reassurance — reassurance last, because that's the part
+                people hold onto. */}
             <ThemedText themeColor="textSecondary" style={styles.summary}>
-              There&apos;s a watch out, and you&apos;re in good shape. Still time
-              to prepare calmly.
+              {buildGreetingSummary(stormLevel, stormAlert)}
             </ThemedText>
           </View>
 
@@ -261,12 +298,14 @@ export default function HomeScreen() {
             {attentionCards}
           </View>
 
-          {/* One row pointing into Alerts, not a second copy of the alert card. */}
+          {/* One row pointing into Alerts, not a second copy of the alert card. Hidden
+              until Alerts has saved an answer — an empty row would have nothing true to say. */}
+          {alerts !== null && (
           <ThemedView type="backgroundElement" style={styles.stormRow}>
             <View style={[styles.stormDot, { backgroundColor: stormDotColor }]} />
 
             <View style={styles.stormText}>
-              <ThemedText type="smallBold">{STORM_STATUS.label}</ThemedText>
+              <ThemedText type="smallBold">{stormLabel}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {buildStormDetail(household?.place ?? null)}
               </ThemedText>
@@ -278,6 +317,7 @@ export default function HomeScreen() {
               color={theme.textSecondary}
             />
           </ThemedView>
+          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>

@@ -27,9 +27,7 @@ import { getCachedAlerts, saveAlerts, type CachedAlerts } from "@/db/alerts";
 import { getHousehold } from "@/db/household";
 import { formatTime, levelFor, timelineFor, topAlert } from "@/lib/alert-rules";
 import { fetchActiveAlerts } from "@/lib/nws";
-
-// Mock. Jun 1 = 0, Nov 30 = 100.
-const SEASON_TODAY_PERCENT = 30;
+import { seasonPercent } from "@/lib/season";
 
 // Mock — should come from the user's unchecked checklist items.
 const NEXT_STEPS = [
@@ -54,34 +52,36 @@ export default function AlertsScreen() {
   const [isOffline, setIsOffline] = useState(false);
   const [place, setPlace] = useState<string | null>(null);
 
+  // Out here rather than inside the focus effect so the retry button can run it too.
+  const load = useCallback(async () => {
+    const household = await getHousehold(db);
+    setPlace(household?.place ?? null);
+
+    // No zone = onboarded offline, nothing to ask NWS about.
+    if (!household?.nws_zone_id) {
+      return;
+    }
+    const zoneId = household.nws_zone_id;
+
+    // The saved answer goes up first, then gets replaced if NWS answers.
+    setResult(await getCachedAlerts(db, zoneId));
+
+    const alerts = await fetchActiveAlerts(zoneId);
+    if (alerts === null) {
+      setIsOffline(true);
+      return;
+    }
+
+    setResult(await saveAlerts(db, zoneId, alerts));
+    setIsOffline(false);
+  }, [db]);
+
   // On focus, so a storm that started while the app was closed still shows up.
+  // Called inside, not passed straight in — useFocusEffect reads a returned value as cleanup.
   useFocusEffect(
     useCallback(() => {
-      async function load() {
-        const household = await getHousehold(db);
-        setPlace(household?.place ?? null);
-
-        // No zone = onboarded offline, nothing to ask NWS about.
-        if (!household?.nws_zone_id) {
-          return;
-        }
-        const zoneId = household.nws_zone_id;
-
-        // The saved answer goes up first, then gets replaced if NWS answers.
-        setResult(await getCachedAlerts(db, zoneId));
-
-        const alerts = await fetchActiveAlerts(zoneId);
-        if (alerts === null) {
-          setIsOffline(true);
-          return;
-        }
-
-        setResult(await saveAlerts(db, zoneId, alerts));
-        setIsOffline(false);
-      }
-
       load();
-    }, [db]),
+    }, [load]),
   );
 
   // Derived, not stored — so the level, card, and time always come from the same answer.
@@ -120,7 +120,7 @@ export default function AlertsScreen() {
           )}
 
           {level === "calm" && (
-            <CalmState seasonTodayPercent={SEASON_TODAY_PERCENT} place={place} />
+            <CalmState seasonTodayPercent={seasonPercent(new Date())} place={place} />
           )}
 
           {(level === "watch" || level === "warning") && alert !== null && (
@@ -131,7 +131,9 @@ export default function AlertsScreen() {
 
           {alert !== null && <NextSteps steps={NEXT_STEPS} />}
 
-          {isOffline && <OfflineAvailability features={OFFLINE_FEATURES} />}
+          {isOffline && (
+            <OfflineAvailability features={OFFLINE_FEATURES} onRetry={load} />
+          )}
 
           {/* Outside both states — it shows with or without an alert. */}
           <ThemedText themeColor="textSecondary" style={styles.disclaimer}>
