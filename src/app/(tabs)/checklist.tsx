@@ -18,8 +18,9 @@ import {
 } from "@/db/checklist";
 import { useTheme } from "@/hooks/use-theme";
 
-// Empty green circle when unchecked, filled with a ✓ when checked.
-function Checkbox({ checked }: { checked: boolean }) {
+// Empty green circle when unchecked, filled with a ✓ when checked. Exported — the supply
+// detail screen reuses it for a binary item's own done toggle.
+export function Checkbox({ checked }: { checked: boolean }) {
   const theme = useTheme();
 
   return (
@@ -58,9 +59,9 @@ function ProgressBar({ percent }: { percent: number }) {
   );
 }
 
-// One row. An item with a target (water, food, flashlights) shows a count and a fill bar,
-// and the whole row opens the supply detail screen — that's where the number gets changed.
-// Everything else is a plain tick with its reason underneath.
+// One row. Anything linked to a supply — count or binary — opens the detail screen; that's
+// where the number changes, or a binary item marks itself done. A custom item you typed in
+// has no supply behind it, so it's still the checkbox itself.
 function ChecklistRow({
   item,
   onToggle,
@@ -71,18 +72,18 @@ function ChecklistRow({
   const theme = useTheme();
 
   const isCount = item.target_qty !== null;
+  const isLinked = item.inventory_id !== null;
   const onHand = item.on_hand ?? 0;
 
   function handlePress() {
-    if (isCount && item.inventory_id !== null) {
+    if (isLinked) {
       router.push(`/supply/${item.inventory_id}`);
     } else {
       onToggle();
     }
   }
 
-  // A count row is a button into the detail screen; a binary row is the checkbox itself.
-  const a11yProps = isCount
+  const a11yProps = isLinked
     ? { accessibilityRole: "button" as const }
     : {
         accessibilityRole: "checkbox" as const,
@@ -122,7 +123,7 @@ function ChecklistRow({
         )}
       </View>
 
-      {isCount && (
+      {isLinked && (
         <MaterialCommunityIcons
           name="chevron-right"
           size={20}

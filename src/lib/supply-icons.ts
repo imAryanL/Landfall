@@ -4,7 +4,8 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ComponentProps } from "react";
 
-type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+// Exported — Home's needs-attention cards pick their own icon and want the same type.
+export type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 const ICONS: Record<string, IconName> = {
   water: "water",

@@ -1,12 +1,11 @@
 // Home screen — greeting, readiness ring, category breakdown, storm row.
-// Real so far: the greeting, the Checklist bar and the Alerts bar. The rest is mock.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ReadinessRing } from '@/components/readiness-ring';
@@ -16,13 +15,25 @@ import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/the
 import { getCachedAlerts, type CachedAlerts } from '@/db/alerts';
 import { getChecklistProgress, type ChecklistProgress } from '@/db/checklist';
 import { getHousehold, type Household } from '@/db/household';
-import { getSupplyCoverage, type SupplyCoverage } from '@/db/inventory';
+import {
+  getLowestSupply,
+  getSoonestExpiring,
+  getSupplyCoverage,
+  type LowestSupply,
+  type SoonestExpiring,
+  type SupplyCoverage,
+} from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
 import { levelFor, topAlert, type AlertLevel } from '@/lib/alert-rules';
+import { daysUntil, expiryLabel, isExpiringSoon } from '@/lib/expiry';
 import { type AlertData } from '@/lib/nws';
+import { iconFor, type IconName } from '@/lib/supply-icons';
 
-// Documents is the last hardcoded bar — there's no documents table yet. The other three
-// are read from the database.
+// One needs-attention card. id is the supply it's about — where tapping the card goes.
+type AttentionItem = { id: number; title: string; subtitle: string; icon: IconName };
+
+// Documents isn't included yet — no vault feature exists to measure. Add it back
+// here once it does.
 function buildBreakdown(
   progress: ChecklistProgress | null,
   household: Household | null,
@@ -52,25 +63,67 @@ function buildBreakdown(
   return [
     { label: 'Supplies', percent: suppliesPercent },
     { label: 'Checklist', percent: checklistPercent },
-    { label: 'Documents', percent: 40 },
     { label: 'Alerts', percent: alertsPercent },
   ];
 }
 
-// Mock until quantities and expiry dates are real.
-const NEEDS_ATTENTION = [
-  {
-    title: 'Water supply is low',
-    subtitle: '3 of 8 gallons stored',
-    icon: 'water' as const,
-  },
-  {
-    title: 'Batteries expiring soon',
-    subtitle: 'AA pack · 12 days left',
-    icon: 'battery-alert' as const,
-  },
-];
+// The ring is just these bars averaged — one number standing in for three.
+function computeReadinessScore(breakdown: { label: string; percent: number }[]) {
+  let total = 0;
+  for (const item of breakdown) {
+    total += item.percent;
+  }
 
+  return Math.round(total / breakdown.length);
+}
+
+// '3 of 25 gallons stored', or without a unit when the item doesn't have one (flashlights).
+function stockedLabel(quantity: number, target: number, unit: string | null) {
+  if (unit === null) {
+    return `${quantity} of ${target} stored`;
+  }
+
+  return `${quantity} of ${target} ${unit} stored`;
+}
+
+// The supply furthest from its target, or nothing if everything's at least half-stocked —
+// "low" should mean something, not just "not yet full."
+function buildLowSupplyCard(lowest: LowestSupply | null): AttentionItem | null {
+  if (lowest === null || lowest.target_qty === 0) {
+    return null;
+  }
+
+  if (lowest.quantity / lowest.target_qty >= 0.5) {
+    return null;
+  }
+
+  return {
+    id: lowest.id,
+    title: `${lowest.name} running low`,
+    subtitle: stockedLabel(lowest.quantity, lowest.target_qty, lowest.unit),
+    icon: iconFor(lowest.template_id),
+  };
+}
+
+// The soonest-expiring supply, or nothing if it isn't close yet — same clock icon the
+// notifications onboarding screen already uses for "supplies about to expire".
+function buildExpiryCard(soonest: SoonestExpiring | null, today: Date): AttentionItem | null {
+  if (soonest === null) {
+    return null;
+  }
+
+  const daysLeft = daysUntil(soonest.expires_at, today);
+  if (!isExpiringSoon(daysLeft)) {
+    return null;
+  }
+
+  return {
+    id: soonest.id,
+    title: `${soonest.name} expiring soon`,
+    subtitle: expiryLabel(daysLeft),
+    icon: 'clock-alert-outline',
+  };
+}
 
 // City and state, never the county — a county name is right for hundreds of ZIPs that aren't yours.
 // The line under the greeting. Same saved NWS answer as the storm row, so the top and
@@ -142,6 +195,8 @@ export default function HomeScreen() {
   const [household, setHousehold] = useState<Household | null>(null);
   const [progress, setProgress] = useState<ChecklistProgress | null>(null);
   const [coverage, setCoverage] = useState<SupplyCoverage | null>(null);
+  const [lowestSupply, setLowestSupply] = useState<LowestSupply | null>(null);
+  const [soonestExpiring, setSoonestExpiring] = useState<SoonestExpiring | null>(null);
 
   // The answer the Alerts tab saved. Home reads it and never fetches — one screen owns
   // talking to NWS, so the two can't end up showing different storms.
@@ -166,6 +221,8 @@ export default function HomeScreen() {
 
         setProgress(await getChecklistProgress(db));
         setCoverage(await getSupplyCoverage(db));
+        setLowestSupply(await getLowestSupply(db));
+        setSoonestExpiring(await getSoonestExpiring(db));
 
         const permission = await Notifications.getPermissionsAsync();
         setNotificationsGranted(permission.granted);
@@ -176,6 +233,7 @@ export default function HomeScreen() {
   );
 
   const breakdown = buildBreakdown(progress, household, coverage, notificationsGranted);
+  const readinessScore = computeReadinessScore(breakdown);
 
   const breakdownBars = [];
   for (const item of breakdown) {
@@ -203,18 +261,34 @@ export default function HomeScreen() {
     stormDotColor = theme.dangerFill;
   }
 
+  // Both cards are real now — each can independently decide it has nothing to say.
+  const attentionItems: AttentionItem[] = [];
+  const lowSupplyCard = buildLowSupplyCard(lowestSupply);
+  if (lowSupplyCard !== null) {
+    attentionItems.push(lowSupplyCard);
+  }
+  const expiryCard = buildExpiryCard(soonestExpiring, new Date());
+  if (expiryCard !== null) {
+    attentionItems.push(expiryCard);
+  }
+
   // "1 items" reads wrong, so pick the word to match the count.
-  const attentionCount = NEEDS_ATTENTION.length;
+  const attentionCount = attentionItems.length;
   const attentionLabel =
     attentionCount === 1 ? '1 item' : `${attentionCount} items`;
 
   const attentionCards = [];
-  for (const item of NEEDS_ATTENTION) {
+  for (const item of attentionItems) {
     attentionCards.push(
-      <ThemedView
-        key={item.title}
-        type="warningBackground"
-        style={styles.warningCard}
+      <Pressable
+        key={item.id}
+        onPress={() => router.push(`/supply/${item.id}`)}
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.warningCard,
+          { backgroundColor: theme.warningBackground },
+          pressed && styles.pressed,
+        ]}
       >
         <MaterialCommunityIcons
           name={item.icon}
@@ -236,7 +310,7 @@ export default function HomeScreen() {
           size={22}
           color={theme.warning}
         />
-      </ThemedView>
+      </Pressable>
     );
   }
 
@@ -275,7 +349,7 @@ export default function HomeScreen() {
           {/* Score and bars share one card: apart they said the same thing twice. */}
           <ThemedView type="backgroundElement" style={styles.card}>
             <View style={styles.readinessRow}>
-              <ReadinessRing score={72} size={124} width={11} />
+              <ReadinessRing score={readinessScore} size={124} width={11} />
 
               <View style={styles.breakdownColumn}>{breakdownBars}</View>
             </View>
@@ -287,6 +361,9 @@ export default function HomeScreen() {
             </ThemedText>
           </ThemedView>
 
+          {/* Hidden when both cards decide they have nothing to say — an empty
+              "Needs attention" header would be a promise with nothing behind it. */}
+          {attentionItems.length > 0 && (
           <View style={styles.needsAttentionSection}>
             <View style={styles.sectionHeaderRow}>
               <ThemedText type="smallBold">Needs attention</ThemedText>
@@ -297,6 +374,7 @@ export default function HomeScreen() {
 
             {attentionCards}
           </View>
+          )}
 
           {/* One row pointing into Alerts, not a second copy of the alert card. Hidden
               until Alerts has saved an answer — an empty row would have nothing true to say. */}
@@ -416,6 +494,9 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.four,
     padding: Spacing.three,
     gap: Spacing.three,
+  },
+  pressed: {
+    opacity: 0.6,
   },
   warningCardText: {
     flex: 1, // pushes the chevron to the far edge

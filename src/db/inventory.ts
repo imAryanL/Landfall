@@ -73,8 +73,8 @@ export async function saveInventory(db: SQLiteDatabase, draft: OnboardingDraft) 
   }
 }
 
-// One inventory row as the table stores it, plus the target from the checklist item it
-// stocks. The last three are null for anything not linked to one.
+// One inventory row as the table stores it, plus the target and done state from the
+// checklist item it stocks. Those and checklist_item_id are null for anything not linked.
 export type InventoryItemRow = {
   id: number;
   name: string;
@@ -82,9 +82,11 @@ export type InventoryItemRow = {
   quantity: number;
   storage_location: string | null;
   expires_at: string | null;
+  checklist_item_id: number | null;
   template_id: string | null;
   target_qty: number | null;
   unit: string | null;
+  done: number | null;
 };
 
 // The columns both reads want, kept in one place so the list and the detail screen can't
@@ -97,9 +99,11 @@ const SELECT_ITEMS = `
          inventory_items.quantity,
          inventory_items.storage_location,
          inventory_items.expires_at,
+         inventory_items.checklist_item_id,
          checklist_items.template_id,
          checklist_items.target_qty,
-         checklist_items.unit
+         checklist_items.unit,
+         checklist_items.done
     FROM inventory_items
     LEFT JOIN checklist_items
            ON checklist_items.id = inventory_items.checklist_item_id
@@ -188,5 +192,66 @@ export async function setInventoryQuantity(
       $now: now,
       $id: id,
     }
+  );
+}
+
+/**
+ * Sets or clears one supply's expiry date. Null clears it — the same path a "not set"
+ * item already reads as.
+ */
+export async function setExpiryDate(db: SQLiteDatabase, id: number, expiresAt: string | null) {
+  await db.runAsync(
+    `UPDATE inventory_items SET expires_at = $expires_at, updated_at = $updated_at WHERE id = $id`,
+    { $expires_at: expiresAt, $updated_at: new Date().toISOString(), $id: id }
+  );
+}
+
+export type LowestSupply = {
+  id: number;
+  name: string;
+  quantity: number;
+  target_qty: number;
+  unit: string | null;
+  template_id: string | null;
+};
+
+/**
+ * The countable supply furthest from its target (as a fraction, not a raw amount, so a
+ * short-3-of-25 doesn't lose to a short-1-of-3). Whether it's actually LOW is Home's call.
+ */
+export async function getLowestSupply(db: SQLiteDatabase) {
+  return db.getFirstAsync<LowestSupply>(
+    `SELECT inventory_items.id,
+            inventory_items.name,
+            inventory_items.quantity,
+            checklist_items.target_qty,
+            checklist_items.unit,
+            checklist_items.template_id
+       FROM inventory_items
+       JOIN checklist_items ON checklist_items.id = inventory_items.checklist_item_id
+      WHERE checklist_items.target_qty IS NOT NULL
+      ORDER BY (CAST(inventory_items.quantity AS REAL) / checklist_items.target_qty) ASC,
+               inventory_items.id ASC
+      LIMIT 1`
+  );
+}
+
+export type SoonestExpiring = {
+  id: number;
+  name: string;
+  expires_at: string;
+};
+
+/**
+ * The one supply expiring soonest, for Home's needs-attention card. Null once nothing
+ * has a date set. Whether it's actually SOON is Home's call, not this query's.
+ */
+export async function getSoonestExpiring(db: SQLiteDatabase) {
+  return db.getFirstAsync<SoonestExpiring>(
+    `SELECT id, name, expires_at
+       FROM inventory_items
+      WHERE expires_at IS NOT NULL
+      ORDER BY expires_at ASC
+      LIMIT 1`
   );
 }
