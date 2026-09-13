@@ -35,7 +35,16 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Landfall uses your camera to photograph documents for your vault.",
+          "photosPermission": "Landfall lets you add a photo from your library to your document vault.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

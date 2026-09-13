@@ -5,7 +5,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 export const DATABASE_NAME = 'landfall.db';
 
 // Bump this by one every time a step is added to the ladder below.
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 6;
 
 /**
  * Brings a database file up to the current version. Runs once when the app starts.
@@ -169,10 +169,31 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     currentVersion = 5;
   }
 
+  // --- Step 6 ------------------------------------------------------------------------
+  if (currentVersion === 5) {
+    await db.execAsync(`
+      CREATE TABLE documents (
+        id INTEGER PRIMARY KEY NOT NULL,
+
+        title TEXT NOT NULL,
+        category TEXT NOT NULL,
+
+        -- JSON array of paths under the app's own documents directory, e.g. front and
+        -- back of an ID. Same trick household.medical_notes uses for a list in one column.
+        photo_uris TEXT NOT NULL,
+
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    currentVersion = 6;
+  }
+
   // --- Future steps go here ----------------------------------------------------------
-  //   if (currentVersion === 5) {
-  //     await db.execAsync(`CREATE TABLE documents (...);`);
-  //     currentVersion = 6;
+  //   if (currentVersion === 6) {
+  //     ...
+  //     currentVersion = 7;
   //   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

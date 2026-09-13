@@ -24,6 +24,11 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="documents">
+        <NativeTabs.Trigger.Label>Documents</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="doc.fill" md="description" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="alerts">
         <NativeTabs.Trigger.Label>Alerts</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="exclamationmark.triangle.fill" md="warning" />
