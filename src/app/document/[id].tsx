@@ -4,30 +4,44 @@
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useSQLiteContext } from "expo-sqlite";
 import { useEffect, useRef, useState } from "react";
-import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import {
+  Alert,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PhotoViewer } from "@/components/photo-viewer";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Fonts, MaxContentWidth, Spacing } from "@/constants/theme";
-import { deleteDocument, getDocument, type DocumentRow } from "@/db/documents";
+import { deleteDocument, getDocument, updateDocumentNotes, updateDocumentTitle, type DocumentRow } from "@/db/documents";
 import { useTheme } from "@/hooks/use-theme";
 
-// 'Sep 3', matching the list row's short date.
+// 'September 3' — spelled out here, unlike the list row's shorter 'Sep 3'.
 function addedLabel(createdAt: string) {
   const date = new Date(createdAt);
-  return `Added ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  return `Added ${date.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`;
 }
 
 export default function DocumentDetailScreen() {
   const theme = useTheme();
   const db = useSQLiteContext();
   const photoWidth = Math.min(useWindowDimensions().width, MaxContentWidth);
+  // A full square left too much empty space below the title/delete row on a real
+  // screen — 4:3 gives the photo a proper hero size without dominating the page.
+  const heroHeight = photoWidth * 0.75;
 
   const { id } = useLocalSearchParams<{ id: string }>();
   const documentId = Number(id);
@@ -35,6 +49,10 @@ export default function DocumentDetailScreen() {
   const [doc, setDoc] = useState<DocumentRow | null>(null);
   const [page, setPage] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
   const heroScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -78,20 +96,103 @@ export default function DocumentDetailScreen() {
     await Sharing.shareAsync(photos[page]);
   }
 
-  async function handleDelete() {
-    await deleteDocument(db, documentId);
-    leave();
+  function startEditingTitle() {
+    if (doc === null) {
+      return;
+    }
+    setTitleDraft(doc.title);
+    setEditingTitle(true);
+  }
+
+  // Fires on both the keyboard's Done and tapping away — no separate confirm/cancel
+  // buttons needed. Always exits edit mode, even when there's nothing worth saving.
+  async function saveTitle() {
+    if (doc !== null) {
+      const trimmed = titleDraft.trim();
+      if (trimmed.length > 0 && trimmed !== doc.title) {
+        await updateDocumentTitle(db, documentId, trimmed);
+        setDoc({ ...doc, title: trimmed });
+      }
+    }
+    setEditingTitle(false);
+  }
+
+  function startEditingNotes() {
+    if (doc === null) {
+      return;
+    }
+    setNotesDraft(doc.notes);
+    setEditingNotes(true);
+  }
+
+  // Unlike the title, an empty note is a valid save — it's how you clear one out.
+  async function saveNotes() {
+    if (doc !== null) {
+      const trimmed = notesDraft.trim();
+      if (trimmed !== doc.notes) {
+        await updateDocumentNotes(db, documentId, trimmed);
+        setDoc({ ...doc, notes: trimmed });
+      }
+    }
+    setEditingNotes(false);
+  }
+
+  // Deleting removes the photo files too, with no trash to recover from — worth an
+  // are-you-sure since this is the app's only delete flow that can't be undone.
+  function handleDelete() {
+    Alert.alert("Delete document?", "This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await deleteDocument(db, documentId);
+          leave();
+        },
+      },
+    ]);
   }
 
   const photos: string[] = doc !== null ? JSON.parse(doc.photo_uris) : [];
 
   return (
     <ThemedView style={{ flex: 1 }}>
-      <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
-        <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
+      {/* The back button sits 16-56pt from the edge, inside the default 50pt edge-swipe
+          zone — narrowing the zone stops it from eating the button's taps, without
+          losing the swipe-back gesture itself. */}
+      <Stack.Screen options={{ gestureResponseDistance: { start: 12 } }} />
+
+      {/* A real row above the photo, not floating on top of it — so the photo starts
+          below the buttons instead of bleeding under them. Back doesn't need doc to be
+          loaded, so it's outside that check; Share does, so it stays gated. */}
+      <SafeAreaView edges={["top"]}>
+        <View style={styles.navBar}>
+          <Pressable
+            onPress={leave}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={12}
+            style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}>
+            <MaterialCommunityIcons name="chevron-left" size={20} color={theme.text} />
+          </Pressable>
+
+          {doc !== null && (
+            <Pressable
+              onPress={handleShare}
+              accessibilityRole="button"
+              accessibilityLabel="Share"
+              style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name="export-variant" size={19} color={theme.text} />
+            </Pressable>
+          )}
+        </View>
+      </SafeAreaView>
+
+      <SafeAreaView style={{ flex: 1 }} edges={["left", "right", "bottom"]}>
+        <ScrollView contentContainerStyle={styles.scrollContent} bounces={false} keyboardShouldPersistTaps="handled">
           {doc !== null && (
             <>
-              <View style={{ width: photoWidth, height: photoWidth, alignSelf: "center" }}>
+              <View style={{ width: photoWidth, height: heroHeight, alignSelf: "center" }}>
                 <ScrollView
                   ref={heroScrollRef}
                   horizontal
@@ -100,7 +201,7 @@ export default function DocumentDetailScreen() {
                   onMomentumScrollEnd={handleScrollEnd}>
                   {photos.map((uri) => (
                     <Pressable key={uri} onPress={() => setViewerOpen(true)} accessibilityRole="button" accessibilityLabel="View full screen">
-                      <Image source={{ uri }} style={{ width: photoWidth, height: photoWidth }} contentFit="cover" />
+                      <Image source={{ uri }} style={{ width: photoWidth, height: heroHeight }} contentFit="cover" />
                     </Pressable>
                   ))}
                 </ScrollView>
@@ -122,54 +223,93 @@ export default function DocumentDetailScreen() {
 
               <View style={styles.body}>
                 <View style={styles.titleBlock}>
-                  <ThemedText style={styles.title}>{doc.title}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {doc.category} &middot; {addedLabel(doc.created_at)}
-                  </ThemedText>
+                  {editingTitle ? (
+                    <TextInput
+                      value={titleDraft}
+                      onChangeText={setTitleDraft}
+                      autoFocus
+                      returnKeyType="done"
+                      onSubmitEditing={saveTitle}
+                      onBlur={saveTitle}
+                      style={[styles.titleInput, { color: theme.text, borderColor: theme.border }]}
+                    />
+                  ) : (
+                    <View style={styles.titleEditRow}>
+                      <ThemedText style={styles.title}>{doc.title}</ThemedText>
+                      <Pressable onPress={startEditingTitle} accessibilityRole="button" accessibilityLabel="Edit title" hitSlop={8}>
+                        <MaterialCommunityIcons name="pencil-outline" size={22} color={theme.textSecondary} />
+                      </Pressable>
+                    </View>
+                  )}
+
+                  <View style={styles.metaBlock}>
+                    <ThemedText type="default" themeColor="textSecondary">
+                      Type: {doc.category}
+                    </ThemedText>
+                    <ThemedText type="default" themeColor="textSecondary">
+                      {addedLabel(doc.created_at)}
+                    </ThemedText>
+                  </View>
                 </View>
 
-                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                {/* Opens the notes editor in its own modal (below) rather than inline —
+                    inline, the keyboard covered it with no reliable way to scroll it back
+                    into view; a dedicated sheet sidesteps that entirely. */}
+                <View style={styles.notesBlock}>
+                  <ThemedText type="small" themeColor="textTertiary" style={styles.notesLabel}>
+                    NOTES
+                  </ThemedText>
 
-                <Pressable
-                  onPress={handleDelete}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.deleteRow, pressed && styles.pressed]}>
-                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={theme.textSecondary} />
-                  <ThemedText themeColor="textSecondary">Delete document</ThemedText>
-                </Pressable>
+                  <Pressable onPress={startEditingNotes} accessibilityRole="button" accessibilityLabel="Edit notes">
+                    <ThemedText type="default" themeColor={doc.notes.length > 0 ? "text" : "textSecondary"}>
+                      {doc.notes.length > 0
+                        ? doc.notes
+                        : "Add a note — a policy number, a phone number, anything worth having handy."}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+
+                <View>
+                  <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+                  <Pressable
+                    onPress={handleDelete}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.deleteRow, pressed && styles.pressed]}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={20} color={theme.textSecondary} />
+                    <ThemedText themeColor="textSecondary">Delete document</ThemedText>
+                  </Pressable>
+                </View>
               </View>
             </>
           )}
         </ScrollView>
 
-        {doc !== null && (
-          <>
-            <SafeAreaView edges={["top"]} style={[styles.floatingButton, styles.backButton]}>
-              <Pressable
-                onPress={leave}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-                style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}>
-                <MaterialCommunityIcons name="chevron-left" size={20} color={theme.text} />
-              </Pressable>
-            </SafeAreaView>
-
-            <SafeAreaView edges={["top"]} style={[styles.floatingButton, styles.shareButton]}>
-              <Pressable
-                onPress={handleShare}
-                accessibilityRole="button"
-                accessibilityLabel="Share"
-                style={({ pressed }) => [styles.circleButton, pressed && styles.pressed]}>
-                <MaterialCommunityIcons name="export-variant" size={19} color={theme.text} />
-              </Pressable>
-            </SafeAreaView>
-          </>
-        )}
-
         {viewerOpen && photos.length > 0 && (
           <PhotoViewer photos={photos} index={page} onChangeIndex={setPage} onClose={() => setViewerOpen(false)} />
         )}
       </SafeAreaView>
+
+      <Modal visible={editingNotes} animationType="slide" presentationStyle="pageSheet" onRequestClose={saveNotes}>
+        <ThemedView style={{ flex: 1 }}>
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={styles.notesModalHeader}>
+              <ThemedText style={styles.notesModalTitle}>Notes</ThemedText>
+              <Pressable onPress={saveNotes} accessibilityRole="button" accessibilityLabel="Done">
+                <ThemedText style={[styles.notesModalDone, { color: theme.primaryDeep }]}>Done</ThemedText>
+              </Pressable>
+            </View>
+
+            <TextInput
+              value={notesDraft}
+              onChangeText={setNotesDraft}
+              autoFocus
+              multiline
+              style={[styles.notesModalInput, { color: theme.text }]}
+            />
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -189,21 +329,71 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
+  // A normal top-to-bottom flow, not flex/space-between — the notes field means there's
+  // usually real content to fill this space now instead of needing a layout trick to hide
+  // that there wasn't any.
   body: {
     padding: Spacing.four,
     maxWidth: MaxContentWidth,
     width: "100%",
     alignSelf: "center",
-    gap: Spacing.two,
+    gap: Spacing.four,
   },
   titleBlock: {
-    gap: Spacing.one,
+    gap: Spacing.three,
+  },
+  metaBlock: {
+    gap: Spacing.two,
+  },
+  notesBlock: {
+    gap: Spacing.two,
+  },
+  notesLabel: {
+    letterSpacing: 0.5,
+  },
+  notesModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.three,
+  },
+  notesModalTitle: {
+    fontFamily: Fonts.serif,
+    fontSize: 20,
+    fontWeight: "500",
+  },
+  notesModalDone: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  notesModalInput: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: "500",
+    paddingHorizontal: Spacing.four,
+    textAlignVertical: "top",
+  },
+  titleEditRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.two,
   },
   title: {
     fontFamily: Fonts.serif,
     fontSize: 28,
     lineHeight: 34,
     fontWeight: "500",
+  },
+  titleInput: {
+    flex: 1,
+    fontFamily: Fonts.serif,
+    fontSize: 22,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
   },
   divider: {
     height: 1,
@@ -218,23 +408,17 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
-  floatingButton: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-  },
-  backButton: {
-    alignItems: "flex-start",
-  },
-  shareButton: {
-    alignItems: "flex-end",
+  navBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   circleButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginTop: Spacing.two,
-    marginHorizontal: Spacing.three,
     backgroundColor: "rgba(255,255,255,0.92)",
     alignItems: "center",
     justifyContent: "center",

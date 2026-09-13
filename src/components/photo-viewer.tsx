@@ -17,6 +17,9 @@ const DOUBLE_TAP_SCALE = 2.5;
 // How far a drag has to travel, at rest zoom, to count as "swipe to the next photo"
 // rather than "put the photo back where it was."
 const SWIPE_THRESHOLD = 80;
+// A dismiss is a bigger, more deliberate motion than a page swipe, so it gets its own,
+// larger threshold.
+const DISMISS_THRESHOLD = 120;
 
 type PhotoViewerProps = {
   photos: string[];
@@ -42,6 +45,7 @@ export function PhotoViewer({ photos, index, onChangeIndex, onClose }: PhotoView
               onChangeIndex(index - 1);
             }
           }}
+          onDismiss={onClose}
         />
 
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.closeButton}>
@@ -64,10 +68,12 @@ function ZoomablePhoto({
   uri,
   onSwipeLeft,
   onSwipeRight,
+  onDismiss,
 }: {
   uri: string;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
+  onDismiss: () => void;
 }) {
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -111,8 +117,10 @@ function ZoomablePhoto({
         translateX.value = clamp(savedTranslateX.value + event.translationX, scale.value, screenWidth);
         translateY.value = clamp(savedTranslateY.value + event.translationY, scale.value, screenHeight);
       } else {
-        // At rest, a horizontal drag previews the swipe to the next/previous photo.
+        // At rest, the drag just follows the finger — onEnd decides whether it was a
+        // horizontal page-swipe, a vertical dismiss, or neither.
         translateX.value = event.translationX;
+        translateY.value = event.translationY;
       }
     })
     .onEnd((event) => {
@@ -122,12 +130,20 @@ function ZoomablePhoto({
         return;
       }
 
-      if (event.translationX < -SWIPE_THRESHOLD) {
+      const isVertical = Math.abs(event.translationY) > Math.abs(event.translationX);
+
+      if (isVertical && event.translationY > DISMISS_THRESHOLD) {
+        runOnJS(onDismiss)();
+        return;
+      }
+
+      if (!isVertical && event.translationX < -SWIPE_THRESHOLD) {
         runOnJS(onSwipeLeft)();
-      } else if (event.translationX > SWIPE_THRESHOLD) {
+      } else if (!isVertical && event.translationX > SWIPE_THRESHOLD) {
         runOnJS(onSwipeRight)();
       }
       translateX.value = withTiming(0);
+      translateY.value = withTiming(0);
     });
 
   const doubleTapGesture = Gesture.Tap()
@@ -141,9 +157,10 @@ function ZoomablePhoto({
       savedScale.value = DOUBLE_TAP_SCALE;
     });
 
-  // Double-tap gets first refusal so a quick tap doesn't also start a drag; pinch runs
-  // alongside whichever of those two ends up handling the touch.
-  const gesture = Gesture.Simultaneous(pinchGesture, Gesture.Exclusive(doubleTapGesture, panGesture));
+  // Race, not Exclusive — a real drag activates on movement and wins immediately, rather
+  // than waiting for double-tap's own timeout to rule itself out first. That wait was
+  // exactly what made panning feel laggy. Pinch runs alongside whichever of those wins.
+  const gesture = Gesture.Simultaneous(pinchGesture, Gesture.Race(panGesture, doubleTapGesture));
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],

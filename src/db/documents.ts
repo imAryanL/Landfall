@@ -11,6 +11,7 @@ export type DocumentRow = {
   title: string;
   category: string;
   photo_uris: string;
+  notes: string;
   created_at: string;
   updated_at: string;
 };
@@ -71,6 +72,28 @@ export async function getDocuments(db: SQLiteDatabase) {
  */
 export async function getDocument(db: SQLiteDatabase, id: number) {
   return db.getFirstAsync<DocumentRow>('SELECT * FROM documents WHERE id = $id', { $id: id });
+}
+
+/**
+ * Renames a document. Category and photos are untouched — this is just the title field.
+ */
+export async function updateDocumentTitle(db: SQLiteDatabase, id: number, title: string) {
+  await db.runAsync('UPDATE documents SET title = $title, updated_at = $updated_at WHERE id = $id', {
+    $title: title,
+    $updated_at: new Date().toISOString(),
+    $id: id,
+  });
+}
+
+/**
+ * Saves the free-text notes field. Same shape as updateDocumentTitle.
+ */
+export async function updateDocumentNotes(db: SQLiteDatabase, id: number, notes: string) {
+  await db.runAsync('UPDATE documents SET notes = $notes, updated_at = $updated_at WHERE id = $id', {
+    $notes: notes,
+    $updated_at: new Date().toISOString(),
+    $id: id,
+  });
 }
 
 /**
