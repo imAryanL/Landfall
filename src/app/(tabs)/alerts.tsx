@@ -24,17 +24,27 @@ import {
 } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { getCachedAlerts, saveAlerts, type CachedAlerts } from "@/db/alerts";
+import { getChecklist, type ChecklistItemRow } from "@/db/checklist";
 import { getHousehold } from "@/db/household";
 import { formatTime, levelFor, timelineFor, topAlert } from "@/lib/alert-rules";
 import { fetchActiveAlerts } from "@/lib/nws";
 import { seasonPercent } from "@/lib/season";
 
-// Mock — should come from the user's unchecked checklist items.
-const NEXT_STEPS = [
-  "Charge phones and power banks tonight",
-  "Top off your vehicle's fuel",
-  "Review your family meeting point",
-];
+const NEXT_STEP_COUNT = 3;
+
+// The first few unfinished items, in the checklist's own order.
+function pickNextSteps(items: ChecklistItemRow[]) {
+  const steps = [];
+  for (const item of items) {
+    if (item.done === 0) {
+      steps.push(item);
+    }
+    if (steps.length === NEXT_STEP_COUNT) {
+      break;
+    }
+  }
+  return steps;
+}
 
 // Only real features — naming one the app doesn't have defeats the list.
 const OFFLINE_FEATURES = [
@@ -51,9 +61,13 @@ export default function AlertsScreen() {
   // True when NWS didn't answer this time, so the result shown is an old one.
   const [isOffline, setIsOffline] = useState(false);
   const [place, setPlace] = useState<string | null>(null);
+  const [nextSteps, setNextSteps] = useState<ChecklistItemRow[]>([]);
 
   // Out here rather than inside the focus effect so the retry button can run it too.
   const load = useCallback(async () => {
+    // Local, so it's read before anything that needs a connection.
+    setNextSteps(pickNextSteps(await getChecklist(db)));
+
     const household = await getHousehold(db);
     setPlace(household?.place ?? null);
 
@@ -76,7 +90,6 @@ export default function AlertsScreen() {
     setIsOffline(false);
   }, [db]);
 
-  // On focus, so a storm that started while the app was closed still shows up.
   // Called inside, not passed straight in — useFocusEffect reads a returned value as cleanup.
   useFocusEffect(
     useCallback(() => {
@@ -129,7 +142,8 @@ export default function AlertsScreen() {
 
           {alert !== null && <StormTimeline steps={timeline} />}
 
-          {alert !== null && <NextSteps steps={NEXT_STEPS} />}
+          {/* Hidden once everything's done. */}
+          {alert !== null && nextSteps.length > 0 && <NextSteps items={nextSteps} />}
 
           {isOffline && (
             <OfflineAvailability features={OFFLINE_FEATURES} onRetry={load} />

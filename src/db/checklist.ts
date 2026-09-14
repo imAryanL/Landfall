@@ -1,12 +1,12 @@
-// Writes the starting checklist. Screens call this instead of writing SQL themselves.
-// The rules that decide what goes in it live in checklist-template.ts, not here.
+// Checklist rows: seeded at onboarding, then read, ticked, added to, and deleted from.
+// What goes in the starting list is decided in checklist-template.ts.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { OnboardingDraft } from '@/components/onboarding/onboarding-draft';
 import { buildChecklist } from '@/lib/checklist-template';
 
-// is_custom is left out — these all come from the template, and the column defaults to 0.
+// is_custom is left out — template items take the column default, 0.
 const INSERT_ITEM = `
   INSERT INTO checklist_items (
     template_id, name, category, rationale,
@@ -19,8 +19,7 @@ const INSERT_ITEM = `
   )
 `;
 
-// Seeds the checklist from what onboarding collected. Like the inventory seed, this runs
-// once — the first-launch gate is what stops it happening twice.
+// Runs once. The first-launch gate keeps it from running again.
 export async function saveChecklist(db: SQLiteDatabase, draft: OnboardingDraft) {
   const items = buildChecklist(draft.adults, draft.kids, draft.pets, draft.owned);
   const now = new Date().toISOString();
@@ -33,14 +32,8 @@ export async function saveChecklist(db: SQLiteDatabase, draft: OnboardingDraft) 
       $rationale: item.rationale,
       $target_qty: item.targetQty,
       $unit: item.unit,
-
-      // No boolean type in SQLite, so 0 or 1 like every other flag in the schema.
       $done: item.done ? 1 : 0,
-
-      // The moment it became true, so Home can eventually show what moved this week.
-      // Null for anything starting unchecked.
       $done_at: item.done ? now : null,
-
       $sort_order: item.sortOrder,
       $created_at: now,
       $updated_at: now,
@@ -54,9 +47,7 @@ export type ChecklistProgress = {
 };
 
 /**
- * How much of the checklist is finished. `done` is stored as 0 or 1, so adding the column
- * up counts the ticked ones. COALESCE covers the empty table, where SUM returns null
- * rather than zero.
+ * How much is finished. done is 0 or 1, so SUM counts the ticked ones.
  */
 export async function getChecklistProgress(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<ChecklistProgress>(
@@ -70,9 +61,7 @@ export async function getChecklistProgress(db: SQLiteDatabase) {
   return row;
 }
 
-// One checklist row as the table stores it — snake_case, same reasoning as Household.
-// inventory_id and on_hand come from the supply row this item stocks; both are null for
-// anything with no linked supply (a custom item the user added themselves).
+// inventory_id and on_hand come from the linked supply — null for a custom item.
 export type ChecklistItemRow = {
   id: number;
   template_id: string | null;
@@ -83,13 +72,12 @@ export type ChecklistItemRow = {
   unit: string | null;
   done: number;
   sort_order: number;
+  is_custom: number;
   inventory_id: number | null;
   on_hand: number | null;
 };
 
-// Template items first, in their laid-out order; then anything the user added, oldest
-// first. Ordering here rather than in the screen means the list can't shuffle between
-// launches. LEFT JOIN so an item with no linked supply still comes back, just no count.
+// Template items in their laid-out order, then custom items oldest first.
 export async function getChecklist(db: SQLiteDatabase) {
   return db.getAllAsync<ChecklistItemRow>(
     `SELECT checklist_items.id,
@@ -101,6 +89,7 @@ export async function getChecklist(db: SQLiteDatabase) {
             checklist_items.unit,
             checklist_items.done,
             checklist_items.sort_order,
+            checklist_items.is_custom,
             inventory_items.id AS inventory_id,
             inventory_items.quantity AS on_hand
        FROM checklist_items
@@ -111,8 +100,7 @@ export async function getChecklist(db: SQLiteDatabase) {
 }
 
 /**
- * Ticks or unticks one item. done_at is cleared on the way back down, so it always means
- * 'when this was last finished' rather than 'when it was last touched'.
+ * Ticks or unticks one item. done_at clears on untick, so it means "last finished".
  */
 export async function setChecklistItemDone(
   db: SQLiteDatabase,
@@ -135,8 +123,7 @@ export async function setChecklistItemDone(
 }
 
 /**
- * Every template id mapped to the row it produced, so other tables can point at it.
- * Only rows that came from the template have one — anything the user typed has none.
+ * Every template id mapped to its row id, so other tables can link to it.
  */
 export async function getChecklistIdsByTemplate(db: SQLiteDatabase) {
   const rows = await db.getAllAsync<{ id: number; template_id: string }>(
@@ -152,9 +139,7 @@ export async function getChecklistIdsByTemplate(db: SQLiteDatabase) {
 }
 
 /**
- * Adds an item the user typed in. Only name and category are set — everything else takes
- * its column default (no template, no target, no rationale, unchecked). getChecklist
- * sorts custom items after the template ones, so it lands at the end of its category.
+ * Adds an item the user typed in. Everything but name and category takes its default.
  */
 export async function addCustomChecklistItem(
   db: SQLiteDatabase,
@@ -168,6 +153,33 @@ export async function addCustomChecklistItem(
      VALUES ($name, $category, 1, $created_at, $updated_at)`,
     { $name: name, $category: category, $created_at: now, $updated_at: now }
   );
+}
+
+/**
+ * Deletes an item the user added. is_custom = 1 means a template item can never be deleted here.
+ */
+export async function deleteCustomChecklistItem(db: SQLiteDatabase, id: number) {
+  await db.runAsync('DELETE FROM checklist_items WHERE id = $id AND is_custom = 1', { $id: id });
+}
+
+/**
+ * Removes a built-in item and its supply row. Items with a target (water, food, flashlights) can't be.
+ */
+export async function removeChecklistItem(db: SQLiteDatabase, id: number) {
+  // One transaction, so a failure can't leave a supply row behind with no checklist item.
+  await db.withTransactionAsync(async () => {
+    const result = await db.runAsync(
+      'DELETE FROM checklist_items WHERE id = $id AND target_qty IS NULL',
+      { $id: id }
+    );
+
+    // Nothing deleted means it had a target, so its supply row stays too.
+    if (result.changes === 0) {
+      return;
+    }
+
+    await db.runAsync('DELETE FROM inventory_items WHERE checklist_item_id = $id', { $id: id });
+  });
 }
 
 // Which checklist items ask for a number. Owning water doesn't finish 25 gallons.

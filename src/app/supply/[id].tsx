@@ -1,22 +1,19 @@
-// One supply, opened by tapping a row on the Checklist tab. The square brackets in the
-// filename make the id part of the address, so /supply/3 lands here with id = "3".
-//
-// It sits beside the tabs rather than inside them, like onboarding does, so it pushes
-// over the whole screen and the tab bar steps out of the way while you edit an item.
+// One supply's detail screen. The brackets in the filename make /supply/3 arrive with id = "3".
+// Sits outside the tabs, so it covers the tab bar while open.
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Checkbox } from "@/app/(tabs)/checklist";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Fonts, MaxContentWidth, Spacing } from "@/constants/theme";
-import { setChecklistItemDone } from "@/db/checklist";
+import { removeChecklistItem, setChecklistItemDone } from "@/db/checklist";
 import {
   getInventoryItem,
   setExpiryDate,
@@ -27,8 +24,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { daysUntil, expiryLabel, isExpiringSoon } from "@/lib/expiry";
 import { iconFor } from "@/lib/supply-icons";
 
-// The line under the big number. Only items linked to a checklist row have a target, and
-// a target can exist without a unit — flashlights need 3, measured in nothing.
+// Only linked items have a target, and some have no unit (flashlights: just 3).
 function targetLabel(item: InventoryItemRow) {
   if (item.target_qty === null) {
     return "No target — you either have one or you don't.";
@@ -41,12 +37,10 @@ function targetLabel(item: InventoryItemRow) {
   return `Target for your household: ${item.target_qty} ${item.unit}`;
 }
 
-// Only these actually go bad. Cash, documents, rope, a tarp, shutters — none of them
-// expire, and offering a date for them would be inventing a fact about the item.
+// Only these need replacing. A date on cash or a tarp would be inventing a fact.
 const EXPIRABLE_TEMPLATE_IDS = ["water", "food", "batteries", "first_aid", "medicines"];
 
-// Quick-pick spans instead of a date-picker library — keeps this screen on the same
-// no-native-modules footing as the rest of v1. "1 year" is just 12 months.
+// Quick-pick spans instead of a date-picker library, so no native module.
 const EXPIRY_CHOICES = [
   { label: "1 month", months: 1 },
   { label: "3 months", months: 3 },
@@ -54,8 +48,7 @@ const EXPIRY_CHOICES = [
   { label: "1 year", months: 12 },
 ];
 
-// Replaces this item's two reminders. Fixed, deterministic ids so canceling first is
-// always safe — expo-notifications treats an unknown id as a no-op, even the first time.
+// Fixed ids, so cancelling first is always safe — an unknown id is a no-op.
 async function scheduleExpiryReminders(id: number, name: string, expiresAt: string | null) {
   const thirtyDayId = `expiry-30-${id}`;
   const sevenDayId = `expiry-7-${id}`;
@@ -67,8 +60,7 @@ async function scheduleExpiryReminders(id: number, name: string, expiresAt: stri
     return;
   }
 
-  // The date's real either way; the reminder is a bonus on top of it — same rule as the
-  // Alerts bar not counting a zone without notification permission too.
+  // The date still saves without permission; only the reminders need it.
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) {
     return;
@@ -88,7 +80,7 @@ async function scheduleExpiryReminders(id: number, name: string, expiresAt: stri
     await Notifications.scheduleNotificationAsync({
       identifier: thirtyDayId,
       content: {
-        title: `${name} expires in 30 days`,
+        title: `${name} is due for replacing in 30 days`,
         body: "Plan to restock or rotate it soon.",
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: thirtyDaysBefore },
@@ -99,7 +91,7 @@ async function scheduleExpiryReminders(id: number, name: string, expiresAt: stri
     await Notifications.scheduleNotificationAsync({
       identifier: sevenDayId,
       content: {
-        title: `${name} expires in 7 days`,
+        title: `${name} is due for replacing in 7 days`,
         body: "Time to restock or rotate it.",
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: sevenDaysBefore },
@@ -111,17 +103,14 @@ export default function SupplyDetailScreen() {
   const theme = useTheme();
   const db = useSQLiteContext();
 
-  // Whatever sat in the address bar. It arrives as text, since an address is text, so it
-  // has to be turned into a number before the database will match on it.
+  // Arrives as text from the address, so it's turned into a number.
   const { id } = useLocalSearchParams<{ id: string }>();
   const itemId = Number(id);
 
-  // Null while the read is in flight. It also covers an id with no row behind it, which
-  // can't happen by tapping a row — you'd have to open the address by hand.
+  // Null while loading, or for an id with no row.
   const [item, setItem] = useState<InventoryItemRow | null>(null);
 
-  // A plain useEffect, unlike the tabs. This screen is pushed fresh every time it opens
-  // and thrown away when you go back, so there's no stale copy hanging around to re-read.
+  // Plain useEffect: unlike a tab, this screen is pushed fresh every time it opens.
   useEffect(() => {
     async function load() {
       setItem(await getInventoryItem(db, itemId));
@@ -130,9 +119,7 @@ export default function SupplyDetailScreen() {
     load();
   }, [db, itemId]);
 
-  // Save the new count, then read the row back rather than adjusting the number on screen
-  // ourselves. Same call as ticking a checklist item: one small local query, and the
-  // screen can never end up showing something the database disagrees with.
+  // Reads the row back, so the screen always shows what the database holds.
   async function changeQuantity(delta: number) {
     if (item === null) {
       return;
@@ -142,8 +129,7 @@ export default function SupplyDetailScreen() {
     setItem(await getInventoryItem(db, itemId));
   }
 
-  // The checklist row used to be the toggle for a binary item; now its tap opens this
-  // screen instead, so the toggle needs to live somewhere — here.
+  // Binary items tick here, since their checklist row opens this screen.
   async function toggleDone() {
     if (item === null || item.checklist_item_id === null) {
       return;
@@ -167,7 +153,39 @@ export default function SupplyDetailScreen() {
     setItem(await getInventoryItem(db, itemId));
   }
 
+  // Falls back to the checklist when there's no history (a deep link).
+  function leave() {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/checklist");
+    }
+  }
+
+  function handleRemove() {
+    if (item === null || item.checklist_item_id === null) {
+      return;
+    }
+    const checklistItemId = item.checklist_item_id;
+
+    Alert.alert(`Remove "${item.name}"?`, "It comes off your checklist and its reminders stop.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          // A null date just cancels both reminders.
+          await scheduleExpiryReminders(item.id, item.name, null);
+          await removeChecklistItem(db, checklistItemId);
+          leave();
+        },
+      },
+    ]);
+  }
+
   const isCount = item !== null && item.target_qty !== null;
+  // Water, food, and flashlights have targets and stay. Everything else can be removed.
+  const canRemove = item !== null && item.target_qty === null && item.checklist_item_id !== null;
   const isExpirable = item !== null && EXPIRABLE_TEMPLATE_IDS.includes(item.template_id ?? "");
   const daysLeft = item?.expires_at != null ? daysUntil(item.expires_at, new Date()) : null;
   const expiringSoon = daysLeft !== null && isExpiringSoon(daysLeft);
@@ -176,10 +194,9 @@ export default function SupplyDetailScreen() {
     <ThemedView style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={["top", "left", "right"]}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Back to the checklist. Same circular button as onboarding uses. */}
           <View style={styles.header}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={leave}
               accessibilityRole="button"
               accessibilityLabel="Back"
               style={({ pressed }) => [
@@ -213,8 +230,7 @@ export default function SupplyDetailScreen() {
                 </ThemedText>
               </View>
 
-              {/* Count items get the stepper, same as always. Binary items get a plain
-                  done toggle instead — "how many tarps" was never the real question. */}
+              {/* Count items get the stepper, binary items a done toggle. */}
               {isCount ? (
                 <ThemedView type="backgroundElement" style={styles.card}>
                   <ThemedText type="small" themeColor="textTertiary" style={styles.cardLabel}>
@@ -228,8 +244,7 @@ export default function SupplyDetailScreen() {
                       disabled={item.quantity === 0}
                       accessibilityRole="button"
                       accessibilityLabel="Remove one"
-                      // Drawn at 48 and stretched another 6px by hitSlop, so the real
-                      // target clears Apple's 44pt minimum comfortably.
+                      // 48 plus hitSlop clears Apple's 44pt minimum.
                       hitSlop={6}
                       style={({ pressed }) => [
                         styles.bump,
@@ -246,8 +261,7 @@ export default function SupplyDetailScreen() {
 
                     <ThemedText style={styles.quantity}>{item.quantity}</ThemedText>
 
-                    {/* No ceiling: a real target can be 25 gallons, so a cap would be a
-                        guess about how much somebody is allowed to have. */}
+                    {/* No ceiling — any cap would be a guess. */}
                     <Pressable
                       onPress={() => changeQuantity(1)}
                       accessibilityRole="button"
@@ -283,8 +297,7 @@ export default function SupplyDetailScreen() {
                 </ThemedView>
               )}
 
-              {/* Only for the items that actually go bad — see EXPIRABLE_TEMPLATE_IDS.
-                  Amber once it's close, never red. */}
+              {/* Only for items that need replacing. Amber once it's close, never red. */}
               {isExpirable && (
                 <ThemedView
                   type={expiringSoon ? "warningBackground" : "backgroundElement"}
@@ -293,7 +306,7 @@ export default function SupplyDetailScreen() {
                     type="small"
                     themeColor={expiringSoon ? "warning" : "textTertiary"}
                     style={styles.cardLabel}>
-                    EXPIRES
+                    REPLACE BY
                   </ThemedText>
 
                   <ThemedText themeColor={expiringSoon ? "warning" : undefined}>
@@ -316,6 +329,18 @@ export default function SupplyDetailScreen() {
                     ))}
                   </View>
                 </ThemedView>
+              )}
+
+              {canRemove && (
+                <Pressable
+                  onPress={handleRemove}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.removeButton, pressed && styles.pressed]}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={18} color={theme.textSecondary} />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Remove from checklist
+                  </ThemedText>
+                </Pressable>
               )}
             </>
           )}
@@ -349,8 +374,15 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
+  removeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.one,
+    paddingVertical: Spacing.three,
+  },
   itemHeader: {
-    alignItems: "center", // centered, so this reads as a different kind of screen than the list
+    alignItems: "center",
     gap: Spacing.two,
   },
   iconCircle: {
@@ -361,7 +393,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   itemName: {
-    fontFamily: Fonts.serif, // serif is for screen titles, and here the item is the title
+    fontFamily: Fonts.serif,
     fontSize: 30,
     lineHeight: 36,
     fontWeight: "500",
@@ -374,7 +406,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   cardLabel: {
-    letterSpacing: 1, // caps labels get a little air, same as the section labels elsewhere
+    letterSpacing: 1,
   },
   stepper: {
     flexDirection: "row",
@@ -390,15 +422,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bumpDisabled: {
-    opacity: 0.35, // dimmed rather than hidden, so the row never changes shape
+    opacity: 0.35,
   },
   quantity: {
     fontSize: 44,
     lineHeight: 52,
     fontWeight: "600",
-    minWidth: 72, // holds its width into three digits, so the buttons don't shuffle
+    minWidth: 72,
     textAlign: "center",
-    fontVariant: ["tabular-nums"], // every digit the same width
+    fontVariant: ["tabular-nums"],
   },
   doneRow: {
     flexDirection: "row",

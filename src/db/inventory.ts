@@ -1,5 +1,5 @@
-// Writes the supply rows onboarding seeds. Screens call this instead of writing SQL.
-// Runs from the summary screen, after the checklist, so its rows can be pointed at.
+// Supply rows: seeded by onboarding, then read and updated by the checklist, Home, and
+// the supply detail screen.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 
@@ -7,8 +7,6 @@ import { SUPPLY_SECTIONS } from '@/app/onboarding/supplies';
 import type { OnboardingDraft } from '@/components/onboarding/onboarding-draft';
 import { getChecklistIdsByTemplate, getTargetTemplateIds } from '@/db/checklist';
 
-// No id — SQLite assigns it. quantity is always written, never left to the column
-// default: a target item starts at 0, and so does anything the user didn't tap.
 const INSERT_ITEM = `
   INSERT INTO inventory_items (
     name, category, quantity, checklist_item_id, created_at, updated_at
@@ -17,14 +15,12 @@ const INSERT_ITEM = `
   )
 `;
 
-// Screen 4 hands back ids like 'water'. The table wants the label the user actually read,
-// and the section it sat under works as a category for free.
+// Screen 4's ids become rows with the label the user read and its section as the category.
 function draftToRows(draft: OnboardingDraft) {
   const now = new Date().toISOString();
   const rows = [];
 
-  // Every supply gets a row, tapped or not — the merged checklist opens a detail screen
-  // for all of them, so all of them need somewhere to open. owned decides the count.
+  // Every supply gets a row, tapped or not, so every checklist item has a detail screen.
   for (const section of SUPPLY_SECTIONS) {
     for (const item of section.items) {
       rows.push({
@@ -41,22 +37,17 @@ function draftToRows(draft: OnboardingDraft) {
   return rows;
 }
 
-// Seeds the inventory from what onboarding collected. There is no update path here — the
-// first-launch gate is what keeps this from running a second time.
+// Runs once. The first-launch gate keeps it from running again.
 export async function saveInventory(db: SQLiteDatabase, draft: OnboardingDraft) {
   const rows = draftToRows(draft);
 
-  // The checklist is written first, so its rows already exist to be pointed at. Anything
-  // with no matching checklist item just stores null.
+  // The checklist is written first, so its rows already exist to link to.
   const byTemplate = await getChecklistIdsByTemplate(db);
 
   const targetIds = await getTargetTemplateIds(db);
 
-  // A short, fixed list, so a plain loop beats building one statement with a changing
-  // number of rows.
   for (const row of rows) {
-    // A target item starts at 0 regardless — owning bottled water isn't having 25 gallons.
-    // A binary item is complete at 1, but only if they actually tapped it.
+    // Target items start at 0 — owning bottled water isn't having 25 gallons.
     let quantity = 0;
     if (!targetIds.includes(row.templateId) && row.owned) {
       quantity = 1;
@@ -73,8 +64,7 @@ export async function saveInventory(db: SQLiteDatabase, draft: OnboardingDraft) 
   }
 }
 
-// One inventory row as the table stores it, plus the target and done state from the
-// checklist item it stocks. Those and checklist_item_id are null for anything not linked.
+// Target, unit, and done come from the linked checklist item — null when there isn't one.
 export type InventoryItemRow = {
   id: number;
   name: string;
@@ -89,12 +79,14 @@ export type InventoryItemRow = {
   done: number | null;
 };
 
-// The columns both reads want, kept in one place so the list and the detail screen can't
-// end up asking for different things. LEFT JOIN rather than JOIN so an item with no
-// checklist link still comes back, just without a target.
+// Linked supplies show the checklist's name, so onboarding's "Bottled water" reads as
+// "Drinking water" everywhere. Done on read, so rows already saved are fixed too.
+const DISPLAY_NAME = 'COALESCE(checklist_items.name, inventory_items.name) AS name';
+
+// Shared by both reads so the list and the detail screen can't ask for different things.
 const SELECT_ITEMS = `
   SELECT inventory_items.id,
-         inventory_items.name,
+         ${DISPLAY_NAME},
          inventory_items.category,
          inventory_items.quantity,
          inventory_items.storage_location,
@@ -110,15 +102,14 @@ const SELECT_ITEMS = `
 `;
 
 /**
- * Every supply the user has, with the target it is stocking towards.
- * Ordered by id, which is the order onboarding wrote them in.
+ * Every supply, in the order onboarding wrote them.
  */
 export async function getInventory(db: SQLiteDatabase) {
   return db.getAllAsync<InventoryItemRow>(`${SELECT_ITEMS} ORDER BY inventory_items.id`);
 }
 
 /**
- * One supply, for the detail screen. Comes back null when the id doesn't exist.
+ * One supply, for the detail screen. Null when the id doesn't exist.
  */
 export async function getInventoryItem(db: SQLiteDatabase, id: number) {
   return db.getFirstAsync<InventoryItemRow>(
@@ -133,9 +124,7 @@ export type SupplyCoverage = {
 };
 
 /**
- * How stocked the countable supplies are, for Home's Supplies bar. MIN clamps each item
- * so an overstocked one can't push the total past its target; binary items have no
- * quantity to measure and are left out.
+ * Home's Supplies bar. MIN stops an overstocked item from covering for another one.
  */
 export async function getSupplyCoverage(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<SupplyCoverage>(
@@ -150,9 +139,7 @@ export async function getSupplyCoverage(db: SQLiteDatabase) {
 }
 
 /**
- * Saves a new count for one supply, then keeps the checklist row it stocks in step. The
- * minus button already stops at zero; the floor is repeated here so nothing else can
- * write a negative quantity later.
+ * Saves a new count, then keeps the linked checklist item in step. Floors at zero here too.
  */
 export async function setInventoryQuantity(
   db: SQLiteDatabase,
@@ -177,9 +164,7 @@ export async function setInventoryQuantity(
     }
   );
 
-  // The linked count item ticks itself once fully stocked and unticks below target.
-  // Binary items (target_qty NULL) are left to the row tap. COALESCE holds the first
-  // done_at rather than bumping it each time a stocked item goes higher.
+  // Ticks at target, unticks below it. COALESCE keeps the first done_at.
   await db.runAsync(
     `UPDATE checklist_items
         SET done = CASE WHEN $quantity >= target_qty THEN 1 ELSE 0 END,
@@ -196,8 +181,7 @@ export async function setInventoryQuantity(
 }
 
 /**
- * Sets or clears one supply's expiry date. Null clears it — the same path a "not set"
- * item already reads as.
+ * Sets or clears one supply's expiry date. Null clears it.
  */
 export async function setExpiryDate(db: SQLiteDatabase, id: number, expiresAt: string | null) {
   await db.runAsync(
@@ -216,13 +200,12 @@ export type LowestSupply = {
 };
 
 /**
- * The countable supply furthest from its target (as a fraction, not a raw amount, so a
- * short-3-of-25 doesn't lose to a short-1-of-3). Whether it's actually LOW is Home's call.
+ * The countable supply furthest from its target, as a fraction. Whether it's LOW is Home's call.
  */
 export async function getLowestSupply(db: SQLiteDatabase) {
   return db.getFirstAsync<LowestSupply>(
     `SELECT inventory_items.id,
-            inventory_items.name,
+            ${DISPLAY_NAME},
             inventory_items.quantity,
             checklist_items.target_qty,
             checklist_items.unit,
@@ -243,15 +226,17 @@ export type SoonestExpiring = {
 };
 
 /**
- * The one supply expiring soonest, for Home's needs-attention card. Null once nothing
- * has a date set. Whether it's actually SOON is Home's call, not this query's.
+ * The supply with the nearest expiry date. Whether it's SOON is Home's call.
  */
 export async function getSoonestExpiring(db: SQLiteDatabase) {
   return db.getFirstAsync<SoonestExpiring>(
-    `SELECT id, name, expires_at
+    `SELECT inventory_items.id,
+            ${DISPLAY_NAME},
+            inventory_items.expires_at
        FROM inventory_items
-      WHERE expires_at IS NOT NULL
-      ORDER BY expires_at ASC
+       LEFT JOIN checklist_items ON checklist_items.id = inventory_items.checklist_item_id
+      WHERE inventory_items.expires_at IS NOT NULL
+      ORDER BY inventory_items.expires_at ASC
       LIMIT 1`
   );
 }

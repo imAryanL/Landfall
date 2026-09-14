@@ -14,6 +14,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { getCachedAlerts, type CachedAlerts } from '@/db/alerts';
 import { getChecklistProgress, type ChecklistProgress } from '@/db/checklist';
+import { getCoveredCategoryCount } from '@/db/documents';
 import { getHousehold, type Household } from '@/db/household';
 import {
   getLowestSupply,
@@ -25,6 +26,7 @@ import {
 } from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
 import { levelFor, topAlert, type AlertLevel } from '@/lib/alert-rules';
+import { DOCUMENT_CATEGORIES } from '@/lib/document-categories';
 import { daysUntil, expiryLabel, isExpiringSoon } from '@/lib/expiry';
 import { type AlertData } from '@/lib/nws';
 import { iconFor, type IconName } from '@/lib/supply-icons';
@@ -32,12 +34,11 @@ import { iconFor, type IconName } from '@/lib/supply-icons';
 // One needs-attention card. id is the supply it's about — where tapping the card goes.
 type AttentionItem = { id: number; title: string; subtitle: string; icon: IconName };
 
-// Documents isn't included yet — no vault feature exists to measure. Add it back
-// here once it does.
 function buildBreakdown(
   progress: ChecklistProgress | null,
   household: Household | null,
   coverage: SupplyCoverage | null,
+  coveredCategories: number,
   notificationsGranted: boolean
 ) {
   let checklistPercent = 0;
@@ -51,6 +52,9 @@ function buildBreakdown(
     suppliesPercent = Math.round((coverage.stocked / coverage.target) * 100);
   }
 
+  // Categories with at least one document, so ten insurance photos can't stand in for a missing ID.
+  const documentsPercent = Math.round((coveredCategories / DOCUMENT_CATEGORIES.length) * 100);
+
   // Both halves have to be true for an alert to land: a zone to watch, and iOS permission.
   let alertsPercent = 0;
   if (household !== null && household.nws_zone_id !== null) {
@@ -63,11 +67,12 @@ function buildBreakdown(
   return [
     { label: 'Supplies', percent: suppliesPercent },
     { label: 'Checklist', percent: checklistPercent },
+    { label: 'Documents', percent: documentsPercent },
     { label: 'Alerts', percent: alertsPercent },
   ];
 }
 
-// The ring is just these bars averaged — one number standing in for three.
+// The ring is these bars averaged.
 function computeReadinessScore(breakdown: { label: string; percent: number }[]) {
   let total = 0;
   for (const item of breakdown) {
@@ -86,8 +91,7 @@ function stockedLabel(quantity: number, target: number, unit: string | null) {
   return `${quantity} of ${target} ${unit} stored`;
 }
 
-// The supply furthest from its target, or nothing if everything's at least half-stocked —
-// "low" should mean something, not just "not yet full."
+// The supply furthest from its target, or nothing if everything's at least half-stocked.
 function buildLowSupplyCard(lowest: LowestSupply | null): AttentionItem | null {
   if (lowest === null || lowest.target_qty === 0) {
     return null;
@@ -105,8 +109,7 @@ function buildLowSupplyCard(lowest: LowestSupply | null): AttentionItem | null {
   };
 }
 
-// The soonest-expiring supply, or nothing if it isn't close yet — same clock icon the
-// notifications onboarding screen already uses for "supplies about to expire".
+// The supply due for replacing soonest, or nothing if it isn't close yet.
 function buildExpiryCard(soonest: SoonestExpiring | null, today: Date): AttentionItem | null {
   if (soonest === null) {
     return null;
@@ -119,15 +122,13 @@ function buildExpiryCard(soonest: SoonestExpiring | null, today: Date): Attentio
 
   return {
     id: soonest.id,
-    title: `${soonest.name} expiring soon`,
+    title: `${soonest.name} due for replacing`,
     subtitle: expiryLabel(daysLeft),
     icon: 'clock-alert-outline',
   };
 }
 
-// City and state, never the county — a county name is right for hundreds of ZIPs that aren't yours.
-// The line under the greeting. Same saved NWS answer as the storm row, so the top and
-// bottom of the screen can't describe different weather. Event names come from NWS.
+// The line under the greeting. Reads the same saved NWS answer as the storm row.
 function buildGreetingSummary(level: AlertLevel | null, alert: AlertData | null) {
   if (level === 'warning' && alert !== null) {
     return `There's a ${alert.event} out for your area. Follow official guidance and finish what you can.`;
@@ -145,6 +146,7 @@ function buildGreetingSummary(level: AlertLevel | null, alert: AlertData | null)
   return 'Everything you add here works offline, storm or no storm.';
 }
 
+// City and state, never the county.
 function buildStormDetail(place: string | null) {
   if (place === null || place === '') {
     return 'National Weather Service';
@@ -197,16 +199,15 @@ export default function HomeScreen() {
   const [coverage, setCoverage] = useState<SupplyCoverage | null>(null);
   const [lowestSupply, setLowestSupply] = useState<LowestSupply | null>(null);
   const [soonestExpiring, setSoonestExpiring] = useState<SoonestExpiring | null>(null);
+  const [coveredCategories, setCoveredCategories] = useState(0);
 
-  // The answer the Alerts tab saved. Home reads it and never fetches — one screen owns
-  // talking to NWS, so the two can't end up showing different storms.
+  // Saved by the Alerts tab. Home never fetches, so the two can't show different storms.
   const [alerts, setAlerts] = useState<CachedAlerts | null>(null);
 
   // Lives in iOS, not the database, so it gets re-read every time the tab is focused.
   const [notificationsGranted, setNotificationsGranted] = useState(false);
 
-  // useFocusEffect, not useEffect: tab screens stay mounted, so a mount effect would read
-  // once at launch and never again.
+  // Tab screens stay mounted, so a plain useEffect would only read once at launch.
   useFocusEffect(
     // Memoised, or the effect re-runs on every render.
     useCallback(() => {
@@ -223,6 +224,7 @@ export default function HomeScreen() {
         setCoverage(await getSupplyCoverage(db));
         setLowestSupply(await getLowestSupply(db));
         setSoonestExpiring(await getSoonestExpiring(db));
+        setCoveredCategories(await getCoveredCategoryCount(db));
 
         const permission = await Notifications.getPermissionsAsync();
         setNotificationsGranted(permission.granted);
@@ -232,7 +234,7 @@ export default function HomeScreen() {
     }, [db])
   );
 
-  const breakdown = buildBreakdown(progress, household, coverage, notificationsGranted);
+  const breakdown = buildBreakdown(progress, household, coverage, coveredCategories, notificationsGranted);
   const readinessScore = computeReadinessScore(breakdown);
 
   const breakdownBars = [];
@@ -339,8 +341,7 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Fact, then reassurance — reassurance last, because that's the part
-                people hold onto. */}
+            {/* Fact first, reassurance last. */}
             <ThemedText themeColor="textSecondary" style={styles.summary}>
               {buildGreetingSummary(stormLevel, stormAlert)}
             </ThemedText>
@@ -357,12 +358,11 @@ export default function HomeScreen() {
             {/* A score with no explanation reads as arbitrary. */}
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <ThemedText themeColor="textSecondary" style={styles.cardFootnote}>
-              Built from your checklist and supplies — updates as you pack.
+              The average of these four bars.
             </ThemedText>
           </ThemedView>
 
-          {/* Hidden when both cards decide they have nothing to say — an empty
-              "Needs attention" header would be a promise with nothing behind it. */}
+          {/* Hidden when neither card has anything to say. */}
           {attentionItems.length > 0 && (
           <View style={styles.needsAttentionSection}>
             <View style={styles.sectionHeaderRow}>
@@ -376,8 +376,7 @@ export default function HomeScreen() {
           </View>
           )}
 
-          {/* One row pointing into Alerts, not a second copy of the alert card. Hidden
-              until Alerts has saved an answer — an empty row would have nothing true to say. */}
+          {/* Points into Alerts. Hidden until Alerts has saved an answer. */}
           {alerts !== null && (
           <ThemedView type="backgroundElement" style={styles.stormRow}>
             <View style={[styles.stormDot, { backgroundColor: stormDotColor }]} />

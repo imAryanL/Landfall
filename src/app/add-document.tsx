@@ -1,15 +1,22 @@
-// Adds a document to the vault. Reached from the "+ Add document" row on the Documents
-// tab. One screen, two steps held in local state — picking a category and a photo source,
-// then confirming a title — rather than two routes, since there's nothing to navigate back
-// to mid-flow except the step before it.
+// Adds a document to the vault. Two steps in one screen: pick a category and photos,
+// then review the photos and confirm a title.
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
@@ -21,23 +28,31 @@ import { DOCUMENT_CATEGORIES } from "@/lib/document-categories";
 
 type Step = "picker" | "confirm";
 
-// Keeps photos from ballooning the vault's storage — a phone camera's full-quality shot is
-// far more detail than a document photo needs.
+// Full camera quality is far more than a document photo needs.
 const PHOTO_QUALITY = 0.6;
 
 export default function AddDocumentScreen() {
   const theme = useTheme();
   const db = useSQLiteContext();
+  // Screen width minus scrollContent's side padding. If it's off, paging stops mid-photo.
+  const pageWidth = Math.min(useWindowDimensions().width, MaxContentWidth) - Spacing.four * 2;
+  const pageHeight = pageWidth * 0.75;
 
   const [step, setStep] = useState<Step>("picker");
   const [category, setCategory] = useState(DOCUMENT_CATEGORIES[0].label);
   const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [page, setPage] = useState(0);
   const [title, setTitle] = useState("");
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const photoScrollRef = useRef<ScrollView>(null);
 
-  // Normally pops back to the Documents tab. The fallback covers the screen being opened
-  // as the first route (a deep link), where there's no history to pop.
+  // Keeps the scroll position on the current page after a photo is removed.
+  useEffect(() => {
+    photoScrollRef.current?.scrollTo({ x: page * pageWidth, animated: false });
+  }, [page, pageWidth]);
+
+  // Falls back to the Documents tab when there's no history (a deep link).
   function leave() {
     if (router.canGoBack()) {
       router.back();
@@ -91,9 +106,30 @@ export default function AddDocumentScreen() {
 
   function startConfirming(uris: string[]) {
     setPhotoUris(uris);
-    setTitle(category); // a real starting point beats an empty field — renamed in one tap
+    setPage(0);
+    setTitle(category); // starts as the category name, renamed in one tap
     setPermissionNotice(null);
     setStep("confirm");
+  }
+
+  function handleScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    setPage(Math.round(event.nativeEvent.contentOffset.x / pageWidth));
+  }
+
+  // Only offered with 2+ photos. With one left, Back already means "pick again."
+  function handleRemovePhoto() {
+    const remaining = [];
+    for (let i = 0; i < photoUris.length; i++) {
+      if (i !== page) {
+        remaining.push(photoUris[i]);
+      }
+    }
+    setPhotoUris(remaining);
+
+    // Removing the last photo would leave page pointing past the end.
+    if (page > remaining.length - 1) {
+      setPage(remaining.length - 1);
+    }
   }
 
   async function handleSave() {
@@ -140,10 +176,29 @@ export default function AddDocumentScreen() {
     );
   }
 
+  const photoPages = [];
+  const dots = [];
+  for (let i = 0; i < photoUris.length; i++) {
+    photoPages.push(
+      <Image
+        key={photoUris[i]}
+        source={{ uri: photoUris[i] }}
+        style={{ width: pageWidth, height: pageHeight }}
+        contentFit="cover"
+      />,
+    );
+    dots.push(
+      <View
+        key={photoUris[i]}
+        style={[styles.dot, { backgroundColor: i === page ? theme.primary : theme.border }]}
+      />,
+    );
+  }
+
   return (
     <ThemedView style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={["top", "left", "right", "bottom"]}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <Pressable
             onPress={handleBack}
             accessibilityRole="button"
@@ -212,15 +267,36 @@ export default function AddDocumentScreen() {
             </>
           ) : (
             <>
-              <View style={styles.confirmPhoto}>
-                <Image source={{ uri: photoUris[0] }} style={styles.confirmImage} contentFit="cover" />
-              </View>
+              <View style={styles.photoBlock}>
+                <View style={[styles.confirmPhoto, { width: pageWidth, height: pageHeight }]}>
+                  <ScrollView
+                    ref={photoScrollRef}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={handleScrollEnd}>
+                    {photoPages}
+                  </ScrollView>
+                </View>
 
-              {photoUris.length > 1 && (
-                <ThemedText type="small" themeColor="textSecondary">
-                  +{photoUris.length - 1} more photo{photoUris.length > 2 ? "s" : ""}
-                </ThemedText>
-              )}
+                {photoUris.length > 1 && (
+                  <View style={styles.photoControls}>
+                    <View style={styles.dots}>{dots}</View>
+
+                    <Pressable
+                      onPress={handleRemovePhoto}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove photo ${page + 1} of ${photoUris.length}`}
+                      hitSlop={8}
+                      style={({ pressed }) => [styles.removeButton, pressed && styles.pressed]}>
+                      <MaterialCommunityIcons name="trash-can-outline" size={16} color={theme.textSecondary} />
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Remove
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
 
               <View style={styles.field}>
                 <ThemedText type="small" themeColor="textTertiary" style={styles.fieldLabel}>
@@ -329,8 +405,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
   },
-  // The two photo-source buttons are this screen's actual call to action — same solid
-  // fill as Add document and Save, not the outlined look the category rows use.
   photoSourceRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -357,13 +431,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  photoBlock: {
+    gap: Spacing.three,
+  },
   confirmPhoto: {
     borderRadius: 16,
     overflow: "hidden",
   },
-  confirmImage: {
-    width: "100%",
-    aspectRatio: 4 / 3,
+  photoControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dots: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  removeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.one,
   },
   input: {
     borderWidth: 1,

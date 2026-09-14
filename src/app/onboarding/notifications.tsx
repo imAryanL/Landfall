@@ -1,6 +1,5 @@
 // Onboarding screen 5 of 6 — the notification permission ask.
-// iOS shows its permission popup once ever, so this screen says what we send before we
-// spend that one ask. Nothing here writes to the database.
+// iOS only ever shows its popup once, so this explains what gets sent first.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
@@ -30,8 +29,8 @@ const NOTIFICATION_TYPES = [
   {
     id: 'expiring',
     icon: 'clock-alert-outline',
-    title: 'Supplies about to expire',
-    detail: '30 days and 7 days before something runs out.',
+    title: 'Supplies due for replacing',
+    detail: '30 and 7 days before a supply is due.',
   },
 ] as const;
 
@@ -47,8 +46,7 @@ export default function NotificationsScreen() {
   const theme = useTheme();
   const { draft } = useOnboardingDraft();
 
-  // Names the place from screen 3. It's null when the lookup couldn't reach NWS, so the
-  // plain sentence is the fallback rather than a blank.
+  // Names the place from screen 3, or the plain sentence if the lookup was offline.
   let subtitle = 'Just two kinds of notifications.';
   if (draft.point !== null) {
     subtitle =
@@ -57,8 +55,7 @@ export default function NotificationsScreen() {
       '.';
   }
 
-  // Stays local. The real answer lives in iOS, so keeping a copy in the draft would just
-  // be a second source of truth that can drift.
+  // Local, not in the draft — the real answer lives in iOS.
   const [choice, setChoice] = useState<ChoiceId | null>(null);
 
   async function handleChoice(id: ChoiceId) {
@@ -67,9 +64,7 @@ export default function NotificationsScreen() {
       return;
     }
 
-    // Shows the iOS popup, but only the very first time — after that it silently returns
-    // the answer iOS already has. Either way we select from the result and not from the
-    // tap, so declining can never leave this row sitting there green.
+    // Selects from iOS's answer, not the tap, so declining never leaves this row green.
     const result = await Notifications.requestPermissionsAsync();
     if (result.granted) {
       setChoice('on');
@@ -165,14 +160,12 @@ export default function NotificationsScreen() {
             </ThemedText>
           </View>
 
-          {/* White surface, no border. A *bordered* white card means 'fill this in'
-              everywhere else in the app, and there's nothing to fill in here. */}
+          {/* No border — a bordered white card means 'fill this in' elsewhere. */}
           <View style={[styles.rows, { backgroundColor: theme.backgroundElement }]}>
             {typeRows}
           </View>
 
-          {/* Cards rather than screen 3's pills — two lines of text don't sit in a pill, and
-              a radio reads clearer than a right-edge check when there are only two options. */}
+          {/* Cards, not pills — two lines of text don't fit a pill. */}
           <View style={styles.choices}>{choiceRows}</View>
 
           <ThemedText themeColor="textSecondary" style={styles.attribution}>
@@ -182,8 +175,7 @@ export default function NotificationsScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {/* Deliberately ungated — leaving both rows unpicked is a valid answer, the same
-              as every other screen in the flow. */}
+          {/* Ungated — leaving both unpicked is a valid answer. */}
           <Pressable
             onPress={() => router.push('/onboarding/summary')}
             style={({ pressed }) => [

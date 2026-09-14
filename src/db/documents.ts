@@ -1,11 +1,10 @@
-// The document vault. Photos are copied off the picker's temporary cache into a folder
-// this app owns, so the vault survives even if the original camera-roll photo is deleted.
+// The document vault. Photos are copied into a folder the app owns, so they survive
+// the original being deleted from the camera roll.
 
 import { Directory, File, Paths } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-// One document row as the table stores it. photo_uris is JSON — same trick
-// household.medical_notes uses for a list in one column, parsed where it's read.
+// photo_uris is a JSON list, parsed where it's read.
 export type DocumentRow = {
   id: number;
   title: string;
@@ -16,8 +15,7 @@ export type DocumentRow = {
   updated_at: string;
 };
 
-// Copies one picker result into the vault folder under a name that can't collide with
-// another photo saved the same millisecond, then hands back the permanent path.
+// The index keeps two photos saved in the same millisecond from sharing a name.
 async function copyIntoVault(sourceUri: string, index: number) {
   const vaultDir = new Directory(Paths.document, 'vault');
   vaultDir.create({ idempotent: true });
@@ -31,8 +29,7 @@ async function copyIntoVault(sourceUri: string, index: number) {
 }
 
 /**
- * Saves a new document: copies every photo into the vault first, then writes one row
- * pointing at the permanent paths. sourceUris are whatever the picker or camera returned.
+ * Copies every photo into the vault, then writes one row pointing at the copies.
  */
 export async function saveDocument(
   db: SQLiteDatabase,
@@ -61,10 +58,20 @@ export async function saveDocument(
 }
 
 /**
- * Every saved document. The screen groups these by category, same as the checklist does.
+ * Every saved document. The screen groups these by category.
  */
 export async function getDocuments(db: SQLiteDatabase) {
   return db.getAllAsync<DocumentRow>('SELECT * FROM documents ORDER BY id');
+}
+
+/**
+ * How many categories have at least one document. Feeds Home's Documents bar.
+ */
+export async function getCoveredCategoryCount(db: SQLiteDatabase) {
+  const row = await db.getFirstAsync<{ covered: number }>(
+    'SELECT COUNT(DISTINCT category) AS covered FROM documents'
+  );
+  return row?.covered ?? 0;
 }
 
 /**
@@ -75,7 +82,7 @@ export async function getDocument(db: SQLiteDatabase, id: number) {
 }
 
 /**
- * Renames a document. Category and photos are untouched — this is just the title field.
+ * Renames a document.
  */
 export async function updateDocumentTitle(db: SQLiteDatabase, id: number, title: string) {
   await db.runAsync('UPDATE documents SET title = $title, updated_at = $updated_at WHERE id = $id', {
@@ -97,8 +104,7 @@ export async function updateDocumentNotes(db: SQLiteDatabase, id: number, notes:
 }
 
 /**
- * Deletes the row and its photo files. A photo that's already missing is skipped rather
- * than blocking the rest — a stray file shouldn't make a document impossible to remove.
+ * Deletes the row and its photo files. A missing file is skipped, not a blocker.
  */
 export async function deleteDocument(db: SQLiteDatabase, id: number) {
   const doc = await getDocument(db, id);
@@ -111,7 +117,7 @@ export async function deleteDocument(db: SQLiteDatabase, id: number) {
     try {
       new File(uri).delete();
     } catch {
-      // Already gone — fine, the row is what actually matters here.
+      // Already gone.
     }
   }
 
