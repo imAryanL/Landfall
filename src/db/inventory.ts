@@ -6,6 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { SUPPLY_SECTIONS } from '@/app/onboarding/supplies';
 import type { OnboardingDraft } from '@/components/onboarding/onboarding-draft';
 import { getChecklistIdsByTemplate, getTargetTemplateIds } from '@/db/checklist';
+import { itemApplies } from '@/lib/checklist-template';
 
 const INSERT_ITEM = `
   INSERT INTO inventory_items (
@@ -20,9 +21,13 @@ function draftToRows(draft: OnboardingDraft) {
   const now = new Date().toISOString();
   const rows = [];
 
-  // Every supply gets a row, tapped or not, so every checklist item has a detail screen.
+  // Tapped or not, so every checklist item has a detail screen.
   for (const section of SUPPLY_SECTIONS) {
     for (const item of section.items) {
+      if (!itemApplies(item.id, draft.homeType, draft.concerns)) {
+        continue;
+      }
+
       rows.push({
         templateId: item.id,
         name: item.label,

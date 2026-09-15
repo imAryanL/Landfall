@@ -1,11 +1,5 @@
-// Onboarding screen 2 of 6 — who lives in the household.
-//
-// This is the first screen that actually collects anything. What gets typed and tapped
-// here sets every target quantity on the checklist.
-//
-// Nothing on this screen writes to the database. Every answer is held in state until
-// screen 6 saves them together, because a half-finished household row would make the app
-// think onboarding had already run.
+// Onboarding screen 2 of 6 — who lives in the household. Sets the checklist's target quantities.
+// Nothing writes to the database here; screen 6 saves everything at once.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -21,11 +15,10 @@ import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { computeTargets, PLANNING_DAYS } from '@/lib/targets';
 
-// The first of the five screens that ask something — the welcome screen isn't a step.
+// Welcome isn't a step, so this is 1 of 5.
 const CURRENT_STEP = 1;
 
-// Three only. A generator and storm shutters keep turning up in other people's versions
-// of this screen, but both are cut from v1, so neither belongs here.
+// Three only. A generator chip is cut from v1.
 const CONCERNS = [
   { id: 'prescriptions', label: 'Daily prescriptions', icon: 'pill' },
   { id: 'infant', label: 'Infant or formula', icon: 'baby-bottle-outline' },
@@ -35,16 +28,13 @@ const CONCERNS = [
 export default function HouseholdScreen() {
   const theme = useTheme();
 
-  // Answers live in the shared draft above this screen, so they're still here when the
-  // user comes back, and screen 6 can save them. Nothing writes to the database yet.
+  // Shared draft, so answers survive going back and screen 6 can save them.
   const { draft, updateDraft } = useOnboardingDraft();
 
-  // Worked out fresh on every render, so the card below moves the moment a stepper is
-  // tapped. It's plain arithmetic on three small numbers, so there's nothing to cache.
+  // Recomputed every render, so the panel moves the moment a stepper is tapped.
   const targets = computeTargets(draft.adults, draft.kids, draft.pets);
 
-  // Turns one chip on or off. Both branches build a brand new array instead of changing
-  // the old one — React only re-renders when it's handed a different array.
+  // A new array each time — React only re-renders when it gets a different array.
   function toggleConcern(id: string) {
     if (draft.concerns.includes(id)) {
       updateDraft({ concerns: draft.concerns.filter((concernId) => concernId !== id) });
@@ -53,8 +43,6 @@ export default function HouseholdScreen() {
     }
   }
 
-  // Built before the JSX, the same way the progress dots are, so the screen below stays
-  // a readable list of blocks.
   const chips = [];
   for (const concern of CONCERNS) {
     const isOn = draft.concerns.includes(concern.id);
@@ -70,8 +58,6 @@ export default function HouseholdScreen() {
           },
           pressed && styles.chipPressed,
         ]}>
-        {/* The icon carries the meaning at a glance; picking one turns it green along
-            with the fill, so a chosen chip reads as chosen from across the screen. */}
         <MaterialCommunityIcons
           name={concern.icon}
           size={18}
@@ -81,8 +67,6 @@ export default function HouseholdScreen() {
           {concern.label}
         </ThemedText>
 
-        {/* Only shows once picked. The fill and the green already say 'on', but a tick is
-            the thing people look for to be sure it took. */}
         {isOn ? (
           <MaterialCommunityIcons name="check" size={18} color={theme.primaryDeep} />
         ) : null}
@@ -95,18 +79,12 @@ export default function HouseholdScreen() {
       <SafeAreaView style={styles.safeArea}>
         <OnboardingHeader step={CURRENT_STEP} />
 
-        {/* The header stays put and everything below it scrolls, so the progress dots and
-            the way out are always on screen no matter how far down the user is.
-            keyboardShouldPersistTaps lets a stepper be tapped while the name keyboard is
-            still open — without it the first tap only dismisses the keyboard.
-            automaticallyAdjustKeyboardInsets keeps the keyboard from covering the field. */}
+        {/* Without keyboardShouldPersistTaps, the first tap while typing only closes the keyboard. */}
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets>
           <View style={styles.content}>
-            {/* The dots show progress at a glance, but dots alone leave people counting.
-                The label says the same thing in words so nobody has to. */}
             <ThemedText themeColor="textSecondary" style={styles.stepLabel}>
               Step {CURRENT_STEP} of {TOTAL_STEPS}
             </ThemedText>
@@ -124,16 +102,13 @@ export default function HouseholdScreen() {
               Your name
             </ThemedText>
 
-            {/* A controlled input, exactly like on the web: value comes from state, and
-                every keystroke calls onChangeText to put it back. React Native has no
-                onChange event here — the text itself is handed straight to the function. */}
             <TextInput
               value={draft.name}
               onChangeText={(text) => updateDraft({ name: text })}
               placeholder="Aryan"
               placeholderTextColor={theme.textSecondary}
-              autoCapitalize="words" // names are written capitalised
-              autoCorrect={false} // stops an unusual name being 'fixed' into a real word
+              autoCapitalize="words"
+              autoCorrect={false} // stops an unusual name being 'fixed' into a word
               returnKeyType="done"
               style={[
                 styles.input,
@@ -180,13 +155,7 @@ export default function HouseholdScreen() {
             />
           </View>
 
-          {/* Its own tinted panel rather than a row inside the card above — the card is
-              where you answer, this is what the answer produces. Soft green with no border
-              is the same treatment the calm-day nudge uses on Alerts: it reads as the app
-              telling you something, not as another thing to fill in.
-              Florida is cited alone because its guidance covers both halves of our math:
-              a gallon per person a day, for seven days. ready.gov agrees on the gallon but
-              asks for three days, so naming it would mean explaining the gap here. */}
+          {/* Cites Florida alone: it covers both the gallon and the 7 days. ready.gov says 3 days. */}
           <View style={[styles.summary, { backgroundColor: theme.backgroundSelected }]}>
             <MaterialCommunityIcons name="water-outline" size={20} color={theme.primaryDeep} />
 
@@ -209,19 +178,11 @@ export default function HouseholdScreen() {
               Anything else to plan for
             </ThemedText>
 
-            <ThemedText themeColor="textSecondary" style={styles.fieldHelp}>
-              These add items to your checklist.
-            </ThemedText>
-
-            {/* flexWrap lets the chips fall onto a second line by themselves, so a long
-                label never squeezes the others or runs off the edge. */}
             <View style={styles.chipRow}>{chips}</View>
           </View>
         </ScrollView>
 
-        {/* Outside the ScrollView, so it stays pinned to the bottom instead of sitting at
-            the end of a long page the user has to reach. Same deep-green pill as the
-            welcome screen's button. */}
+        {/* Outside the ScrollView, so it stays pinned to the bottom. */}
         <View style={styles.footer}>
           <Pressable
             onPress={() => router.push('/onboarding/location')}
@@ -247,22 +208,19 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scrollContent: {
-    // Breathing room under the last card, so it never sits flush against the bottom edge.
     paddingBottom: Spacing.four,
   },
   content: {
-    // Sits directly under the header rather than centering in the leftover space —
-    // the rest of the screen is about to fill in below this block.
     paddingTop: Spacing.four,
     gap: Spacing.two,
   },
   stepLabel: {
-    fontFamily: Fonts.sans, // sans, like every label in the app — serif means page title
+    fontFamily: Fonts.sans,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '700',
-    textTransform: 'uppercase', // caps as a style, so the text stays normal in the JSX
-    letterSpacing: 0.8, // caps look cramped without a little extra tracking
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   title: {
     fontFamily: Fonts.serif,
@@ -307,18 +265,14 @@ const styles = StyleSheet.create({
   },
   summary: {
     flexDirection: 'row',
-    // Top-aligned, so the drop sits beside the first line instead of drifting to the
-    // middle of a block of text.
     alignItems: 'flex-start',
     gap: Spacing.two,
     marginTop: Spacing.three,
     borderRadius: 14,
     padding: Spacing.three,
-    // No border on purpose — the tint alone separates it, which keeps it lighter than the
-    // bordered cards it sits between.
   },
   summaryText: {
-    flex: 1, // takes the width left over beside the icon, so the text wraps under itself
+    flex: 1,
     gap: Spacing.one,
   },
   targetsText: {
@@ -326,7 +280,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   targetsNumber: {
-    // Only the numbers go bold, so the eye lands on the part that moves.
     fontWeight: '700',
   },
   footnote: {
@@ -338,25 +291,23 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   chipRow: {
-    // Stacked rather than wrapped. Three labels of very different lengths always left a
-    // ragged edge when they wrapped, so full-width rows read as a deliberate list.
     gap: Spacing.two,
     paddingTop: Spacing.one,
   },
   chip: {
-    flexDirection: 'row', // icon and label sit side by side
+    flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
     borderWidth: 1,
-    borderRadius: 999, // anything past half the height gives a full pill
+    borderRadius: 999,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2, // lands the chip at 44 tall, Apple's tap minimum
+    paddingVertical: Spacing.two + 2,
   },
   chipPressed: {
     opacity: 0.6,
   },
   chipLabel: {
-    flex: 1, // takes the leftover width, which pushes the tick to the right edge
+    flex: 1,
     fontSize: 15,
     fontWeight: '500',
   },
@@ -365,15 +316,15 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.two,
   },
   button: {
-    borderRadius: 999, // anything larger than half the height gives a full pill
+    borderRadius: 999,
     paddingVertical: Spacing.three,
     alignItems: 'center',
   },
   buttonPressed: {
-    opacity: 0.85, // dims while held, so a tap feels acknowledged
+    opacity: 0.85,
   },
   buttonText: {
-    color: '#FFFFFF', // fixed white, because the button fill is always dark green
+    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '600',
   },

@@ -18,6 +18,7 @@ import { saveChecklist } from '@/db/checklist';
 import { saveHousehold } from '@/db/household';
 import { saveInventory } from '@/db/inventory';
 import { useTheme } from '@/hooks/use-theme';
+import { itemApplies } from '@/lib/checklist-template';
 import { formatPlace } from '@/lib/nws';
 
 const CURRENT_STEP = 5;
@@ -35,8 +36,7 @@ export default function SummaryScreen() {
   const theme = useTheme();
   const { draft } = useOnboardingDraft();
 
-  // The database opened by SQLiteProvider in the root layout. It's a hook, so it has to be
-  // read here in the component and handed to saveHousehold.
+  // Opened by SQLiteProvider in the root layout.
   const db = useSQLiteContext();
 
   const [saving, setSaving] = useState(false);
@@ -51,8 +51,7 @@ export default function SummaryScreen() {
 
     await saveHousehold(db, draft);
 
-    // The checklist goes first: the inventory rows point at it, so its rows have to
-    // exist before they can be referenced.
+    // Checklist first: the supply rows link to it.
     await saveChecklist(db, draft);
 
     // Screen 4's supplies, linked to the checklist items they stock.
@@ -89,14 +88,21 @@ export default function SummaryScreen() {
     }
   }
 
-  // No denominator — there is no target number of supplies to own.
-  let suppliesValue = 'Nothing marked yet';
-  if (draft.owned.length > 0) {
-    suppliesValue = countLabel(draft.owned.length, 'item') + ' already at home';
+  // Going back and changing home type can leave a hidden pill still tapped, so it doesn't count.
+  let ownedCount = 0;
+  for (const id of draft.owned) {
+    if (itemApplies(id, draft.homeType, draft.concerns)) {
+      ownedCount = ownedCount + 1;
+    }
   }
 
-  // One block per screen that collected something. Notifications aren't here — that answer
-  // lives in iOS, not in the draft, so a row here could disagree with the phone.
+  // No denominator — there is no target number of supplies to own.
+  let suppliesValue = 'Nothing marked yet';
+  if (ownedCount > 0) {
+    suppliesValue = countLabel(ownedCount, 'item') + ' already at home';
+  }
+
+  // Notifications left out: that answer lives in iOS, so a row could disagree with the phone.
   const sections = [
     { id: 'household', icon: 'account-group-outline', label: 'Household', value: householdValue },
     { id: 'home', icon: 'map-marker-outline', label: 'Home', value: homeValue },

@@ -11,11 +11,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { itemApplies } from '@/lib/checklist-template';
 
 const CURRENT_STEP = 3;
 
-// Every item here is on Florida's official disaster supply checklist. No icons and no
-// subtext, so they fit two per line without scrolling.
+// No icons or subtext, so chips fit two per line.
 export const SUPPLY_SECTIONS = [
   {
     title: 'Water & food',
@@ -71,6 +71,10 @@ export default function SuppliesScreen() {
   for (const section of SUPPLY_SECTIONS) {
     const chips = [];
     for (const item of section.items) {
+      if (!itemApplies(item.id, draft.homeType, draft.concerns)) {
+        continue;
+      }
+
       const isOn = draft.owned.includes(item.id);
       chips.push(
         <Pressable
@@ -91,6 +95,11 @@ export default function SuppliesScreen() {
           </ThemedText>
         </Pressable>
       );
+    }
+
+    // No heading for a section with nothing left in it.
+    if (chips.length === 0) {
+      continue;
     }
 
     sectionBlocks.push(

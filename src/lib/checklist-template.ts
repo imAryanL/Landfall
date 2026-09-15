@@ -1,14 +1,9 @@
-// The prep checklist every household starts with.
-//
-// Plain data and plain math, no database and no React. These items are the same ones
-// the onboarding supplies screen asks about, and they share the same ids on purpose —
-// that is what lets 'I already own this' land on the right row with no translation.
+// The prep checklist every household starts with. Plain data and math, no database or React.
+// Ids match the onboarding supplies screen, so "I already own this" lands on the right row.
 
 import { computeTargets } from '@/lib/targets';
 
-// Which figure from computeTargets fills this item's target, or null for the things you
-// either have or you don't. Written out rather than derived from SupplyTargets: the list
-// is three words long and sits right here.
+// Which computeTargets figure fills the target. Null for have-it-or-don't items.
 type QuantitySource = 'waterGallons' | 'meals' | 'flashlights' | null;
 
 type TemplateItem = {
@@ -18,11 +13,12 @@ type TemplateItem = {
   rationale: string;
   quantityFrom: QuantitySource;
   unit: string | null;
+  // Leave these out and the item goes to every household.
+  homeTypes?: string[];
+  concern?: string;
 };
 
-// Categories match the onboarding supplies screen word for word, so the two screens
-// don't quietly disagree about where something belongs. The add-item screen offers these
-// plus 'Other', so a custom item always lands in a section the checklist already draws.
+// Matches the onboarding supplies screen word for word.
 export const CHECKLIST_CATEGORIES = [
   'Water & food',
   'Power & light',
@@ -94,6 +90,7 @@ const TEMPLATE: TemplateItem[] = [
     rationale: 'Refills can take days afterwards',
     quantityFrom: null,
     unit: null,
+    concern: 'prescriptions',
   },
   {
     templateId: 'cash',
@@ -126,6 +123,7 @@ const TEMPLATE: TemplateItem[] = [
     rationale: 'Blocks water at doors and thresholds',
     quantityFrom: null,
     unit: null,
+    homeTypes: ['house'],
   },
   {
     templateId: 'tarp',
@@ -134,6 +132,7 @@ const TEMPLATE: TemplateItem[] = [
     rationale: 'Covers roof damage until repairs',
     quantityFrom: null,
     unit: null,
+    homeTypes: ['house', 'mobile'],
   },
   {
     templateId: 'tie_downs',
@@ -142,8 +141,37 @@ const TEMPLATE: TemplateItem[] = [
     rationale: 'Secures grills, furniture, and bins',
     quantityFrom: null,
     unit: null,
+    homeTypes: ['house', 'mobile'],
   },
 ];
+
+// Whether an item belongs on this household's checklist.
+export function itemApplies(
+  templateId: string,
+  homeType: string | null,
+  concerns: string[]
+): boolean {
+  for (const item of TEMPLATE) {
+    if (item.templateId !== templateId) {
+      continue;
+    }
+
+    if (item.concern !== undefined && !concerns.includes(item.concern)) {
+      return false;
+    }
+
+    // Home type is optional on screen 3, so an unknown one keeps the item.
+    if (item.homeTypes !== undefined && homeType !== null) {
+      if (!item.homeTypes.includes(homeType)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  return true;
+}
 
 // One checklist row, ready to be written to the database.
 export type ChecklistDraftItem = {
@@ -157,29 +185,30 @@ export type ChecklistDraftItem = {
   sortOrder: number;
 };
 
-/**
- * Builds the starting checklist for a household. `owned` is the list of supply ids the
- * user tapped during onboarding.
- */
+// `owned` is the supply ids the user tapped on screen 4.
 export function buildChecklist(
   adults: number,
   kids: number,
   pets: number,
-  owned: string[]
+  owned: string[],
+  homeType: string | null,
+  concerns: string[]
 ): ChecklistDraftItem[] {
   const targets = computeTargets(adults, kids, pets);
   const items: ChecklistDraftItem[] = [];
 
   let sortOrder = 0;
   for (const item of TEMPLATE) {
+    if (!itemApplies(item.templateId, homeType, concerns)) {
+      continue;
+    }
+
     let targetQty = null;
     if (item.quantityFrom !== null) {
       targetQty = targets[item.quantityFrom];
     }
 
-    // Owning something only finishes the item when there is no number attached. Tapping
-    // the water chip says they own bottled water, not that they have eighteen gallons —
-    // so anything with a target starts unchecked and gets satisfied by the inventory.
+    // Owning water isn't having 25 gallons, so only items without a target start done.
     const isBinary = item.quantityFrom === null;
     const done = isBinary && owned.includes(item.templateId);
 

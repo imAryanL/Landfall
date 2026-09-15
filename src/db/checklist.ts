@@ -21,7 +21,14 @@ const INSERT_ITEM = `
 
 // Runs once. The first-launch gate keeps it from running again.
 export async function saveChecklist(db: SQLiteDatabase, draft: OnboardingDraft) {
-  const items = buildChecklist(draft.adults, draft.kids, draft.pets, draft.owned);
+  const items = buildChecklist(
+    draft.adults,
+    draft.kids,
+    draft.pets,
+    draft.owned,
+    draft.homeType,
+    draft.concerns
+  );
   const now = new Date().toISOString();
 
   for (const item of items) {
