@@ -1,3 +1,5 @@
+// The bottom tab bar. Outline icons in grey, filled green when selected.
+
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useColorScheme } from 'react-native';
 
@@ -11,12 +13,15 @@ export default function AppTabs() {
     <NativeTabs
       backgroundColor={colors.background}
       indicatorColor={colors.backgroundElement}
-      iconColor={colors.textSecondary}
-      tintColor={colors.primary}
-      labelStyle={{ selected: { color: colors.text } }}>
+      iconColor={{ default: colors.textSecondary, selected: colors.primaryDeep }}
+      tintColor={colors.primaryDeep}
+      labelStyle={{
+        default: { color: colors.textSecondary },
+        selected: { color: colors.text },
+      }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
+        <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="checklist">
@@ -26,12 +31,15 @@ export default function AppTabs() {
 
       <NativeTabs.Trigger name="documents">
         <NativeTabs.Trigger.Label>Documents</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="doc.fill" md="description" />
+        <NativeTabs.Trigger.Icon sf={{ default: 'doc', selected: 'doc.fill' }} md="description" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="alerts">
         <NativeTabs.Trigger.Label>Alerts</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="exclamationmark.triangle.fill" md="warning" />
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'exclamationmark.triangle', selected: 'exclamationmark.triangle.fill' }}
+          md="warning"
+        />
       </NativeTabs.Trigger>
     </NativeTabs>
   );

@@ -292,14 +292,16 @@ export default function HomeScreen() {
           pressed && styles.pressed,
         ]}
       >
-        <MaterialCommunityIcons
-          name={item.icon}
-          size={22}
-          color={theme.warning}
-        />
+        <View style={[styles.warningIconDisc, { backgroundColor: theme.backgroundElement }]}>
+          <MaterialCommunityIcons
+            name={item.icon}
+            size={20}
+            color={theme.warning}
+          />
+        </View>
 
         <View style={styles.warningCardText}>
-          <ThemedText type="smallBold" themeColor="warning">
+          <ThemedText type="smallBold">
             {item.title}
           </ThemedText>
           <ThemedText type="small" themeColor="warning">
@@ -321,24 +323,25 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            {/* Settings lives on this row rather than taking a 5th tab. Not wired yet. */}
+            {/* Settings lives on this row rather than taking a 5th tab. */}
             <View style={styles.titleRow}>
               <ThemedText style={styles.greeting}>{buildGreeting(household?.name ?? null)}</ThemedText>
-              <View
-                style={[
+              <Pressable
+                onPress={() => router.push('/settings')}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+                style={({ pressed }) => [
                   styles.settingsButton,
-                  {
-                    backgroundColor: theme.backgroundElement,
-                    borderColor: theme.border,
-                  },
+                  { backgroundColor: theme.backgroundSelected },
+                  pressed && styles.pressed,
                 ]}
               >
                 <MaterialCommunityIcons
                   name="cog"
-                  size={22}
-                  color={theme.textSecondary}
+                  size={27}
+                  color={theme.primaryDeep}
                 />
-              </View>
+              </Pressable>
             </View>
 
             {/* Fact first, reassurance last. */}
@@ -419,24 +422,23 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start', // keeps the gear on the first line when the title wraps
+    alignItems: 'flex-start',
     gap: Spacing.three,
   },
   greeting: {
-    flex: 1, // a long greeting wraps instead of pushing the gear off screen
+    flex: 1,
     fontFamily: Fonts.serif,
     fontSize: 32,
     lineHeight: 38,
     fontWeight: '500',
   },
   settingsButton: {
-    width: 44, // Apple's minimum tap target
+    width: 44,
     height: 44,
     borderRadius: 22,
-    borderWidth: 2, // white on light grey is nearly invisible without it
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -3, // (38 line height - 44 circle) / 2, so it centers on the first line
+    marginTop: -3,
   },
   summary: {
     lineHeight: 24,
@@ -452,7 +454,7 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
   },
   breakdownColumn: {
-    flex: 1, // takes whatever width is left after the ring
+    flex: 1,
     gap: Spacing.two,
   },
   stormRow: {
@@ -468,7 +470,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   stormText: {
-    flex: 1, // pushes the chevron to the far edge
+    flex: 1,
     gap: Spacing.half,
   },
   needsAttentionSection: {
@@ -497,8 +499,15 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
+  warningIconDisc: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   warningCardText: {
-    flex: 1, // pushes the chevron to the far edge
+    flex: 1,
     gap: Spacing.half,
   },
   breakdownRow: {

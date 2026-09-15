@@ -1,8 +1,7 @@
 // Onboarding screen 5 of 6 — the notification permission ask.
-// iOS only ever shows its popup once, so this explains what gets sent first.
+// The phone only shows its popup once or twice, so this explains what gets sent first.
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -14,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { requestNotificationPermission } from '@/lib/notifications';
 import { formatPlace } from '@/lib/nws';
 
 const CURRENT_STEP = 4;
@@ -55,7 +55,7 @@ export default function NotificationsScreen() {
       '.';
   }
 
-  // Local, not in the draft — the real answer lives in iOS.
+  // Local, not in the draft — the real answer lives in the phone's settings.
   const [choice, setChoice] = useState<ChoiceId | null>(null);
 
   async function handleChoice(id: ChoiceId) {
@@ -64,8 +64,8 @@ export default function NotificationsScreen() {
       return;
     }
 
-    // Selects from iOS's answer, not the tap, so declining never leaves this row green.
-    const result = await Notifications.requestPermissionsAsync();
+    // Selects from the phone's answer, not the tap, so declining never leaves this row green.
+    const result = await requestNotificationPermission();
     if (result.granted) {
       setChoice('on');
     } else {
